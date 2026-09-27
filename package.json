@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build:parcels-apps": "node address-lookup/scripts/build-parcels-apps.mjs"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.14",

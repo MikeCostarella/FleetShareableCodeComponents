@@ -1,7 +1,12 @@
 # FleetShareableCodeComponents
 
-The source of truth for code shared across the Statehouse fleet. Right now that
-means one library, **parcels-core**, which every `*CountyParcels` app vendors.
+The source of truth for code shared across the Statehouse fleet. Two libraries
+live here:
+
+| Library | What it is | Vendored into |
+|---|---|---|
+| **parcels-core** | the shared parcels-map code: search, loading, geometry, deep links | every `*CountyParcels` app (88) |
+| **address-lookup** | Ohio street address → Census geocoder → that county's parcels app | OhioCounties hub, OhioFleetAddressParcelSearchBrowserExtension |
 
 Until 27 September 2026 the master copy of parcels-core was whatever sat in
 `FranklinCountyParcels/react-app/src/vendor/parcels-core`. That meant one
@@ -13,8 +18,13 @@ only here.
 
 ```
 parcels-core/
-  src/       -> copied to <county>/react-app/src/vendor/parcels-core/      (VERSION 1.10.0)
+  src/       -> copied to <county>/react-app/src/vendor/parcels-core/      (VERSION 1.11.0)
   scripts/   -> copied to <county>/react-app/scripts/vendor/parcels-core/  (VERSION 1.4.0)
+address-lookup/
+  src/       -> copied to OhioCounties/react-app/src/vendor/address-lookup/ and
+                OhioFleetAddressParcelSearchBrowserExtension/vendor/address-lookup/  (VERSION 1.0.0)
+  scripts/build-parcels-apps.mjs  -> regenerates src/parcelsApps.js from the Statehouse manifest
+  test/      -> its suites (kept out of src/ so they don't ship into the extension)
 test-harness/
   county.ts  -> stands in for an app's src/config/county.ts during tests
 vitest.config.ts, package.json, .github/workflows/test.yml
@@ -30,7 +40,7 @@ not taken it yet (Statehouse issue #19).
 
 ## Making a change
 
-1. Edit under `parcels-core/`. Keep the provenance comments (see the shipped
+1. Edit under `parcels-core/` or `address-lookup/`. Keep the provenance comments (see the shipped
    README, "County names in comments").
 2. Add or update the suite next to the code, then run it:
    ```powershell
@@ -44,17 +54,22 @@ not taken it yet (Statehouse issue #19).
 5. Sweep it into the fleet from Statehouse:
    ```powershell
    cd C:\projects\Statehouse
-   python scripts\sync-parcels-core.py            # report only
-   python scripts\sync-parcels-core.py --apply    # copy + md5-verify
+   python scripts\sync-shared-code.py --lib parcels-core            # report only
+   python scripts\sync-shared-code.py --lib parcels-core --apply    # copy + verify + commit plan
+   python scripts\sync-shared-code.py --lib address-lookup --apply
    ```
-   then commit the changed `*CountyParcels` repos through StatehouseUI.
+   then commit the changed repos through StatehouseUI.
 
-Never fix a bug by editing an app's `vendor/parcels-core` directly. The next
+When a parcels app is added or renamed, also run `npm run build:parcels-apps`
+and bump `address-lookup/src/VERSION`.
+
+Never fix a bug by editing a vendored copy directly. The next
 sync overwrites it, and until then that app has silently drifted.
 
 ## Tests
 
-`npm test` runs every `*.test.ts` / `*.test.mjs` under `parcels-core/`. They run
+`npm test` runs every `*.test.ts` / `*.test.mjs` under `parcels-core/` and
+`address-lookup/`. They run
 in plain Node with no browser, the same way they run inside an app.
 
 The library's only link to its host app is the relative import
@@ -68,6 +83,6 @@ There is no `tsc` typecheck here, because the relative seam can't be remapped fo
 ## Future shared code
 
 Anything else the fleet copies between repos by hand (the hamburger menu, build
-stamp, contact config, ...) is a candidate for a sibling folder next to
-`parcels-core/`, with its own `VERSION`, its own suites, and its own Statehouse
-sync.
+stamp, contact config, ...) is a candidate for a sibling folder next to these,
+with its own `VERSION` and suites, and an entry in `LIBS` in Statehouse's
+`sync-shared-code.py`.
