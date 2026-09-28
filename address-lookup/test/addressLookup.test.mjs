@@ -6,6 +6,7 @@ import {
   geocoderUrl,
   lookupWithFetch,
   lookupWithJsonp,
+  ohioRetryAddress,
   parcelsLink,
   parseMatches,
   resolve,
@@ -146,5 +147,63 @@ describe("lookupWithJsonp", () => {
     expect((await lookupWithJsonp("x", bad)).status).toBe("error");
     const silent = fakeDom(() => {});
     expect((await lookupWithJsonp("x", { ...silent, timeoutMs: 20 })).error).toBe("geocoder timed out");
+  });
+});
+
+describe("ohioRetryAddress (1.1.0)", () => {
+  it("adds OH when the address names no ZIP or state", () => {
+    expect(ohioRetryAddress("844 Dravis St SE")).toBe("844 Dravis St SE, OH");
+    expect(ohioRetryAddress(" 4761  Waterloo Rd, Atwater, ")).toBe("4761 Waterloo Rd, Atwater, OH");
+    // Suffixes and directionals that happen to be state codes are not states.
+    expect(ohioRetryAddress("12 Oak Ct")).toBe("12 Oak Ct, OH");
+    expect(ohioRetryAddress("12 Oak St NE")).toBe("12 Oak St NE, OH");
+  });
+
+  it("leaves addresses with a ZIP or a state alone", () => {
+    expect(ohioRetryAddress("844 Dravis St SE 44420")).toBeNull();
+    expect(ohioRetryAddress("844 Dravis St SE, Girard, OH")).toBeNull();
+    expect(ohioRetryAddress("844 Dravis St SE Girard Ohio")).toBeNull();
+    expect(ohioRetryAddress("123 Main St, Pittsburgh, PA")).toBeNull();
+    expect(ohioRetryAddress("  ")).toBeNull();
+  });
+});
+
+describe("the Ohio retry in both lookups", () => {
+  const DRAVIS = answer(match("844 DRAVIS ST SE, GIRARD, OH, 44420", -80.688156, 41.163218, "39155", "Trumbull County"));
+  const geocoder = (url) => (new URL(url).searchParams.get("address").endsWith(", OH") ? DRAVIS : answer());
+
+  it("fetch: retries once with OH and finds it", async () => {
+    const f = vi.fn(async (url) => ({ ok: true, json: async () => geocoder(url) }));
+    const r = await lookupWithFetch("844 Dravis St SE", f);
+    expect(r.status).toBe("found");
+    expect(r.links[0].county).toBe("Trumbull");
+    expect(f).toHaveBeenCalledTimes(2);
+  });
+
+  it("fetch: no retry when the first search finds something, or a ZIP was given", async () => {
+    const f = vi.fn(async () => ({ ok: true, json: async () => WATERLOO }));
+    await lookupWithFetch("4761 Waterloo Rd", f);
+    expect(f).toHaveBeenCalledTimes(1);
+    const g = vi.fn(async () => ({ ok: true, json: async () => answer() }));
+    expect((await lookupWithFetch("1 Nowhere Ln 44201", g)).status).toBe("none");
+    expect(g).toHaveBeenCalledTimes(1);
+  });
+
+  it("jsonp: retries once with OH and finds it", async () => {
+    const win = {};
+    let calls = 0;
+    const doc = {
+      createElement: () => ({ remove: () => {}, onerror: null, src: "" }),
+      head: {
+        appendChild: (s) => {
+          calls++;
+          const u = new URL(s.src);
+          setTimeout(() => win[u.searchParams.get("callback")](geocoder(s.src)), 0);
+        },
+      },
+    };
+    const r = await lookupWithJsonp("844 Dravis St SE", { doc, win });
+    expect(r.status).toBe("found");
+    expect(calls).toBe(2);
   });
 });

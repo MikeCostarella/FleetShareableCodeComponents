@@ -19,6 +19,11 @@
 // extension fetch()es it from its service worker, which its host permission
 // allows.
 //
+// The geocoder will not guess a state: "844 Dravis St SE" matches nothing, while
+// "844 Dravis St SE, OH" finds it in Girard. Everything here is Ohio-only, so a
+// search that finds nothing and names no ZIP or state is retried once with
+// ", OH" appended (1.1.0).
+//
 // Each Ohio match becomes a deep link into that county's parcels app
 // (parcels-core 1.11.0, data/deepLink.ts):
 //   <app>?q=<street>, <zip>&lat=<lat>&lon=<lon>
@@ -63,6 +68,34 @@ const OHIO_STATE_FIPS = "39";
 
 /** Longest address sent to the geocoder. */
 const MAX_ADDRESS = 200;
+
+/** How many matches a UI should list before asking for a city or ZIP. */
+export const MAX_LISTED = 10;
+
+const US_STATES = new Set(
+  ("al ak az ar ca co ct de fl ga hi id il in ia ks ky la me md ma mi mn ms mo mt ne nv nh nj nm ny nc nd " +
+    "oh ok or pa ri sc sd tn tx ut vt va wa wv wi wy dc").split(" "),
+);
+
+/**
+ * The address to retry with when the first search finds nothing, or null when
+ * a retry would not help: the address already has a ZIP, or already ends in a
+ * state (", OH", " Ohio", ", PA", ...).
+ * @param {string} address
+ * @returns {string | null}
+ */
+export function ohioRetryAddress(address) {
+  const a = address.replace(/\s+/g, " ").trim().replace(/[,.\s]+$/, "");
+  if (!a) return null;
+  if (/\b\d{5}(?:-\d{4})?$/.test(a)) return null;
+  // "..., Ohio" / "... OH" / "..., PA": a state is already named. A bare
+  // two-letter word only counts after a comma, because street suffixes and
+  // directionals collide with state codes ("Main Ct" = CT, "Oak St NE" = NE).
+  if (/[,\s](oh|ohio)$/i.test(a)) return null;
+  const st = a.match(/,\s*([a-z]{2})$/i)?.[1]?.toLowerCase();
+  if (st && US_STATES.has(st)) return null;
+  return a + ", OH";
+}
 
 /**
  * The geocoder request URL for an address.
@@ -157,13 +190,31 @@ export function resolve(json, apps = PARCELS_APPS) {
  */
 export async function lookupWithFetch(address, fetchImpl = fetch) {
   if (!address.trim()) return { status: "none", links: [], matches: [] };
-  try {
-    const res = await fetchImpl(geocoderUrl(address));
-    if (!res.ok) return { status: "error", links: [], matches: [], error: "geocoder HTTP " + res.status };
-    return resolve(await res.json());
-  } catch (e) {
-    return { status: "error", links: [], matches: [], error: String(e) };
-  }
+  /** @param {string} a @returns {Promise<LookupResult>} */
+  const once = async (a) => {
+    try {
+      const res = await fetchImpl(geocoderUrl(a));
+      if (!res.ok) return { status: "error", links: [], matches: [], error: "geocoder HTTP " + res.status };
+      return resolve(await res.json());
+    } catch (e) {
+      return { status: "error", links: [], matches: [], error: String(e) };
+    }
+  };
+  return withOhioRetry(address, once);
+}
+
+/**
+ * Run a lookup; when it finds nothing and the address names no ZIP or state,
+ * run it once more with ", OH" appended.
+ * @param {string} address
+ * @param {(a: string) => Promise<LookupResult>} once
+ * @returns {Promise<LookupResult>}
+ */
+async function withOhioRetry(address, once) {
+  const first = await once(address);
+  if (first.status !== "none") return first;
+  const retry = ohioRetryAddress(address);
+  return retry ? once(retry) : first;
 }
 
 let jsonpSeq = 0;
@@ -176,10 +227,20 @@ let jsonpSeq = 0;
  * @returns {Promise<LookupResult>}
  */
 export function lookupWithJsonp(address, opts = {}) {
+  if (!address.trim()) return Promise.resolve({ status: "none", links: [], matches: [] });
+  return withOhioRetry(address, (a) => jsonpOnce(a, opts));
+}
+
+/**
+ * One JSONP request.
+ * @param {string} address
+ * @param {{ doc?: Document, win?: any, timeoutMs?: number }} opts
+ * @returns {Promise<LookupResult>}
+ */
+function jsonpOnce(address, opts) {
   const doc = opts.doc ?? document;
   const win = opts.win ?? window;
   const timeoutMs = opts.timeoutMs ?? 20000;
-  if (!address.trim()) return Promise.resolve({ status: "none", links: [], matches: [] });
   return new Promise((done) => {
     const cb = "__addressLookup" + Date.now().toString(36) + (jsonpSeq++);
     const script = doc.createElement("script");

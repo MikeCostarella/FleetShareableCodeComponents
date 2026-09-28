@@ -1,6 +1,7 @@
 // Types for addressLookup.js (see the comments there).
 
 export declare const GEOCODER_URL: string;
+export declare const MAX_LISTED: number;
 
 export interface AddressMatch {
   address: string;
@@ -28,6 +29,7 @@ export interface LookupResult {
 export type ParcelsApps = Record<string, { county: string; url: string }>;
 
 export declare function geocoderUrl(address: string, jsonpCallback?: string): string;
+export declare function ohioRetryAddress(address: string): string | null;
 export declare function parseMatches(json: unknown): AddressMatch[];
 export declare function parcelsLink(match: AddressMatch, apps?: ParcelsApps): ParcelsLink | null;
 export declare function resolve(json: unknown, apps?: ParcelsApps): LookupResult;
