@@ -1,12 +1,13 @@
 # FleetShareableCodeComponents
 
-The source of truth for code shared across the Statehouse fleet. Two libraries
+The source of truth for code shared across the Statehouse fleet. Three libraries
 live here:
 
 | Library | What it is | Vendored into |
 |---|---|---|
 | **parcels-core** | the shared parcels-map code: search, loading, geometry, deep links | every `*CountyParcels` app (88) |
 | **address-lookup** | Ohio street address → Census geocoder → that county's parcels app | OhioCounties hub, OhioFleetAddressParcelSearchBrowserExtension |
+| **basemaps** | the base map switcher: Streets (CARTO) / Aerial (Ohio OSIP imagery) / Aerial + labels | every Leaflet map app (parcels, county specials, topic maps) |
 
 Until 27 September 2026 the master copy of parcels-core was whatever sat in
 `FranklinCountyParcels/react-app/src/vendor/parcels-core`. That meant one
@@ -25,6 +26,10 @@ address-lookup/
                 OhioFleetAddressParcelSearchBrowserExtension/vendor/address-lookup/  (VERSION 1.0.0)
   scripts/build-parcels-apps.mjs  -> regenerates src/parcelsApps.js from the Statehouse manifest
   test/      -> its suites (kept out of src/ so they don't ship into the extension)
+basemaps/
+  src/       -> copied to <app>/react-app/src/vendor/basemaps/                (VERSION 1.0.0)
+               opt-in: any manifest repo with that folder is a sync target
+  test/      -> its suite (kept out of src/: not every map app has vitest)
 test-harness/
   county.ts  -> stands in for an app's src/config/county.ts during tests
 vitest.config.ts, package.json, .github/workflows/test.yml
@@ -57,6 +62,7 @@ not taken it yet (Statehouse issue #19).
    python scripts\sync-shared-code.py --lib parcels-core            # report only
    python scripts\sync-shared-code.py --lib parcels-core --apply    # copy + verify + commit plan
    python scripts\sync-shared-code.py --lib address-lookup --apply
+   python scripts\sync-shared-code.py --lib basemaps --apply
    ```
    then commit the changed repos through StatehouseUI.
 
@@ -68,8 +74,8 @@ sync overwrites it, and until then that app has silently drifted.
 
 ## Tests
 
-`npm test` runs every `*.test.ts` / `*.test.mjs` under `parcels-core/` and
-`address-lookup/`. They run
+`npm test` runs every `*.test.ts` / `*.test.mjs` under `parcels-core/`,
+`address-lookup/` and `basemaps/`. They run
 in plain Node with no browser, the same way they run inside an app.
 
 The library's only link to its host app is the relative import
