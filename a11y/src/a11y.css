@@ -1,0 +1,119 @@
+/* a11y: shared accessibility styles for the fleet (vendored; do not edit).
+   Import once, after the app's global CSS:  import "./vendor/a11y/a11y.css";
+   Target: WCAG 2.1 AA. */
+
+/* Visually hidden, still read by screen readers (live regions, extra labels). */
+.a11y-sr-only {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Skip link (2.4.1): off-screen until it takes keyboard focus. */
+.a11y-skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 100000;
+  padding: 10px 16px;
+  background: #ffffff;
+  color: #0b3d91;
+  font-weight: 700;
+  font-size: 15px;
+  border: 2px solid #0b3d91;
+  border-radius: 6px;
+  text-decoration: underline;
+  transform: translateY(-200%);
+}
+.a11y-skip-link:focus {
+  transform: none;
+  outline: 3px solid #f5a623;
+  outline-offset: 2px;
+}
+
+/* Row button (RowButton): looks like the cell text it wraps. The resets sit
+   in :where() (zero specificity) so an app class on the same button always
+   wins, whatever order the stylesheets load in. */
+:where(.a11y-row-btn) {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  text-decoration: underline;
+  text-decoration-color: currentColor;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+/* Sort header button (SortHeader default class): fills the <th>. */
+:where(.a11y-sort-btn) {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  width: 100%;
+  text-align: inherit;
+}
+/* Visible keyboard focus (2.4.7) for both. */
+.a11y-row-btn:focus-visible,
+.a11y-sort-btn:focus-visible {
+  outline: 3px solid #f5a623;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Focus ring for dialogs that receive focus themselves (tabIndex -1). */
+[role="dialog"]:focus-visible {
+  outline: 3px solid #f5a623;
+  outline-offset: -3px;
+}
+
+/* Pause, Stop, Hide (2.2.2): the fleet's highlight and "you are here" pulses
+   loop forever. Run them a couple of times, then rest on the static ring so
+   the selection stays visible. The class list covers every pulse in the fleet
+   as of a11y 1.0.0; add new ones here, not in the apps. */
+.sel-hl-pulse,
+.sel-hl-ring,
+.user-loc-pulse,
+.ulm-pulse,
+.ulm-pulse::after,
+.you-pulse,
+.yah-pulse,
+.user-loc-marker .pulse,
+.loc-highlight .ring,
+.pulse-ring span,
+.precinct-pulse-ring,
+.highlight-ring {
+  animation-iteration-count: 2 !important;
+}
+
+/* Users who ask for less motion get none (2.3.3). This list also takes the
+   pulses that already stop on their own, like Hydrants' 5-beat ring. */
+@media (prefers-reduced-motion: reduce) {
+  .sel-hl-pulse,
+  .sel-hl-ring,
+  .user-loc-pulse,
+  .ulm-pulse,
+  .ulm-pulse::after,
+  .you-pulse,
+  .yah-pulse,
+  .user-loc-marker .pulse,
+  .loc-highlight .ring,
+  .pulse-ring span,
+  .precinct-pulse-ring,
+  .highlight-ring,
+  .hydrant-pulse {
+    animation: none !important;
+  }
+  .a11y-skip-link {
+    transition: none;
+  }
+}

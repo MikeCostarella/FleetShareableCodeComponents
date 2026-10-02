@@ -17,6 +17,6 @@ export default defineConfig({
     alias: [{ find: /^(\.\.\/)+config\/county$/, replacement: harness }],
   },
   test: {
-    include: ["parcels-core/**/*.test.{ts,mjs}", "address-lookup/**/*.test.{ts,mjs}", "basemaps/**/*.test.{ts,mjs}"],
+    include: ["parcels-core/**/*.test.{ts,mjs}", "address-lookup/**/*.test.{ts,mjs}", "basemaps/**/*.test.{ts,mjs}", "a11y/**/*.test.{ts,mjs}"],
   },
 });

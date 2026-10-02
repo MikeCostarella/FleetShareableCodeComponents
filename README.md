@@ -1,6 +1,6 @@
 # FleetShareableCodeComponents
 
-The source of truth for code shared across the Statehouse fleet. Three libraries
+The source of truth for code shared across the Statehouse fleet. Four libraries
 live here:
 
 | Library | What it is | Vendored into |
@@ -8,6 +8,7 @@ live here:
 | **parcels-core** | the shared parcels-map code: search, loading, geometry, deep links | every `*CountyParcels` app (88) |
 | **address-lookup** | Ohio street address → Census geocoder → that county's parcels app | OhioCounties hub, OhioFleetAddressParcelSearchBrowserExtension |
 | **basemaps** | the base map switcher: Streets (CARTO) / Aerial (Ohio OSIP imagery) / Aerial + labels | every Leaflet map app (parcels, county specials, topic maps) |
+| **a11y** | WCAG 2.1 AA kit: keyboard list rows + sort headers, live result count, skip link, dialog focus handling, menu arrow keys, `?view=list`, pulse limits | opt-in: every map app as it is fixed (pilots: TrumbullHealthAccessMap, TrumbullCountyHydrants) |
 
 Until 27 September 2026 the master copy of parcels-core was whatever sat in
 `FranklinCountyParcels/react-app/src/vendor/parcels-core`. That meant one
@@ -30,6 +31,10 @@ basemaps/
   src/       -> copied to <app>/react-app/src/vendor/basemaps/                (VERSION 1.0.0)
                opt-in: any manifest repo with that folder is a sync target
   test/      -> its suite (kept out of src/: not every map app has vitest)
+a11y/
+  src/       -> copied to <app>/react-app/src/vendor/a11y/                    (VERSION 1.0.0)
+               opt-in: any manifest repo with that folder is a sync target
+  test/      -> its suite (pure logic in src/a11y.ts; no DOM needed)
 test-harness/
   county.ts  -> stands in for an app's src/config/county.ts during tests
 vitest.config.ts, package.json, .github/workflows/test.yml
@@ -63,6 +68,7 @@ not taken it yet (Statehouse issue #19).
    python scripts\sync-shared-code.py --lib parcels-core --apply    # copy + verify + commit plan
    python scripts\sync-shared-code.py --lib address-lookup --apply
    python scripts\sync-shared-code.py --lib basemaps --apply
+   python scripts\sync-shared-code.py --lib a11y --apply
    ```
    then commit the changed repos through StatehouseUI.
 
@@ -75,7 +81,7 @@ sync overwrites it, and until then that app has silently drifted.
 ## Tests
 
 `npm test` runs every `*.test.ts` / `*.test.mjs` under `parcels-core/`,
-`address-lookup/` and `basemaps/`. They run
+`address-lookup/`, `basemaps/` and `a11y/`. They run
 in plain Node with no browser, the same way they run inside an app.
 
 The library's only link to its host app is the relative import
