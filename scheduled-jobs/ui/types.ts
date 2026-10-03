@@ -52,3 +52,49 @@ export interface SchedulesResponse {
 }
 
 export interface ActionResult { ok?: boolean; error?: string; text?: string }
+
+/** One line of Statehouse's data/job-runs/YYYY-MM.jsonl, plus the delay the server works out. */
+export interface JobRun {
+  id: number;
+  fullName: string;
+  repo: string;
+  workflow: string;
+  file: string;
+  event: "schedule" | "workflow_dispatch" | string;
+  conclusion: string | null;
+  startedAt: string;
+  durationS: number | null;
+  attempt?: number;
+  url: string;
+  commit: { sha: string; message: string; url: string } | null;
+  scheduledFor?: string;
+  delayMin?: number;
+}
+
+export interface JobSummary {
+  id: string;
+  repo: string;
+  fullName: string;
+  workflow: string;
+  file: string;
+  runs: number;
+  scheduled: number;
+  manual: number;
+  success: number;
+  failure: number;
+  other: number;
+  commits: number;
+  medianDelayMin: number | null;
+  lastRun: JobRun | null;
+  lastCommit: (JobRun["commit"] & { startedAt: string }) | null;
+}
+
+export interface HistoryResponse {
+  generated?: string;
+  months?: string[];
+  /** Where the log was read from, for the header. */
+  source?: string;
+  runs?: JobRun[];
+  summary?: JobSummary[];
+  error?: string;
+}

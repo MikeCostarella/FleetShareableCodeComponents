@@ -58,6 +58,9 @@ describe("assessJob", () => {
     expect(w[0].level).toBe("error");
     expect(w[0].text).toMatch(/failure/);
   });
+  it("hours late is not missed (GitHub routinely starts runs 5-7 h late)", () => {
+    expect(assessJob(base({ lastScheduled: { conclusion: "success", createdAt: "2026-10-01T12:30:00Z" } }), nextRuns, { now: new Date("2026-10-02T18:00:00Z") }).some((x) => /Expected/.test(x.text))).toBe(false);
+  });
   it("missed run", () => {
     expect(assess(base({ lastScheduled: { conclusion: "success", createdAt: "2026-09-29T07:40:00Z" } })).some((x) => /Expected a scheduled run/.test(x.text))).toBe(true);
   });

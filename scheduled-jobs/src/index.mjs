@@ -3,3 +3,4 @@
 export { describeCron, nextRuns, parseCron, ordinal, timeIn } from "./cron.mjs";
 export { WORKFLOW_FILE_RE, assessJob, parseWorkflow } from "./workflow.mjs";
 export { DEFAULT_TZ, createScheduledJobs, scanLocalDir } from "./jobs.mjs";
+export { buildHistory, parseRunLog, recentMonths, summarizeRuns, withDelay } from "./history.mjs";

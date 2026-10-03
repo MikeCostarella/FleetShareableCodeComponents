@@ -37,6 +37,27 @@ inactivity), off-in-a-fork (info), not pushed, local cron differs from GitHub's,
 failed last scheduled run, an expected run that never came (3 h grace), and the
 public-repo 60-day inactivity countdown from day 45.
 
+## History (1.1.0)
+
+`history.mjs` reads Statehouse's permanent run log (`data/job-runs/YYYY-MM.jsonl`,
+one line per completed scheduled or manual run, written nightly by Statehouse's
+`job-runs.yml`) and turns it into a History tab:
+
+```js
+const body = await buildHistory({
+  months: 3,
+  readMonth: async (m) => /* the month's jsonl text, or null */,
+  crons,            // Map("<owner>/<repo>/<file>" -> ["17 7 * * *"]) - for "late by"
+  keep: (e) => true // e.g. only one org's repos
+});
+```
+
+Each scheduled run is matched to the cron time it was meant for, so the panel
+shows how late GitHub started it (5-7 hours was routine for Bullpen's nightly CI
+in October 2026 - which is why the "missed run" warning waits 12 hours).
+A view with `history` instead of `load` renders as the History tab: per-job
+totals (runs, results, data commits, typical start delay) and the run list.
+
 ## UI half
 
 ```tsx

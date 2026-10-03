@@ -12,7 +12,7 @@
 // Part of FleetShareableCodeComponents/scheduled-jobs - edit it THERE.
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { ActionResult, ScheduledJob, SchedulesResponse } from "./types";
+import type { ActionResult, HistoryResponse, JobRun, ScheduledJob, SchedulesResponse } from "./types";
 import "./scheduled-jobs.css";
 
 export interface ScheduledJobsView {
@@ -20,7 +20,10 @@ export interface ScheduledJobsView {
   label: string;
   /** Shown above the table - who this view is for, what it can do. */
   note?: ReactNode;
-  load: (fresh: boolean) => Promise<SchedulesResponse>;
+  /** A jobs view... */
+  load?: (fresh: boolean) => Promise<SchedulesResponse>;
+  /** ...or a History view over Statehouse's run log. */
+  history?: (fresh: boolean) => Promise<HistoryResponse>;
   emptyText?: ReactNode;
 }
 
@@ -85,6 +88,7 @@ export default function ScheduledJobsDialog({ title = "Scheduled jobs", views, i
   const [viewId, setViewId] = useState(initialView ?? views[0]?.id);
   const view = views.find((v) => v.id === viewId) ?? views[0];
   const [data, setData] = useState<Record<string, SchedulesResponse>>({});
+  const [hist, setHist] = useState<Record<string, HistoryResponse>>({});
   const [busy, setBusy] = useState<string | null>(null); // job id being acted on, or "load"
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [now, setNow] = useState(Date.now());
@@ -93,14 +97,21 @@ export default function ScheduledJobsDialog({ title = "Scheduled jobs", views, i
     if (!view) return;
     setBusy("load");
     try {
-      const r = await view.load(fresh);
-      setData((d) => ({ ...d, [view.id]: r }));
+      if (view.history) {
+        const r = await view.history(fresh);
+        setHist((h) => ({ ...h, [view.id]: r }));
+      } else if (view.load) {
+        const r = await view.load(fresh);
+        setData((d) => ({ ...d, [view.id]: r }));
+      }
     } catch (e) {
-      setData((d) => ({ ...d, [view.id]: { error: String(e) } }));
+      if (view.history) setHist((h) => ({ ...h, [view.id]: { error: String(e) } }));
+      else setData((d) => ({ ...d, [view.id]: { error: String(e) } }));
     } finally { setBusy(null); setNow(Date.now()); }
   }, [view]);
 
-  useEffect(() => { if (view && !data[view.id]) load(false); }, [view, data, load]);
+  const loaded = view ? (view.history ? !!hist[view.id] : !!data[view.id]) : true;
+  useEffect(() => { if (view && !loaded) load(false); }, [view, loaded, load]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
@@ -108,7 +119,9 @@ export default function ScheduledJobsDialog({ title = "Scheduled jobs", views, i
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const current = view ? data[view.id] : undefined;
+  const current = view && !view.history ? data[view.id] : undefined;
+  const history = view?.history ? hist[view.id] : undefined;
+  const checked = current?.generated || history?.generated;
   const jobs = current?.jobs ?? [];
   const attention = jobs.filter((j) => j.warnings.some((w) => w.level !== "info")).length;
   const repoCount = new Set(jobs.map((j) => j.fullName)).size;
@@ -158,7 +171,7 @@ export default function ScheduledJobsDialog({ title = "Scheduled jobs", views, i
             </span>
           )}
           <span style={{ flex: 1 }} />
-          {current?.generated && <span className="sj-muted sj-small">checked {new Date(current.generated).toLocaleTimeString()}</span>}
+          {checked && <span className="sj-muted sj-small">checked {new Date(checked).toLocaleTimeString()}</span>}
           <button className="sj-btn" onClick={() => load(true)} title="Ask GitHub again" disabled={busy !== null}>
             {busy === "load" ? "…" : "↻"}
           </button>
@@ -178,7 +191,8 @@ export default function ScheduledJobsDialog({ title = "Scheduled jobs", views, i
         )}
         {view?.note && <div className="sj-viewnote">{view.note}</div>}
 
-        {!current && <div className="sj-note">Asking GitHub{"…"}</div>}
+        {view?.history && <HistoryPanel data={history} now={now} />}
+        {!view?.history && !current && <div className="sj-note">Asking GitHub{"…"}</div>}
         {current?.error && <div className="sj-note sj-bad">{current.error}</div>}
         {current?.errors?.map((e) => (
           <div key={e.fullName} className="sj-note sj-warn">{"⚠"} {e.fullName}: {e.error}</div>
@@ -223,7 +237,7 @@ export default function ScheduledJobsDialog({ title = "Scheduled jobs", views, i
         {note && <div className={`sj-note ${note.ok ? "sj-good" : "sj-bad"}`}>{note.text}</div>}
         <div className="sj-foot">
           {footer ?? <>GitHub cron is UTC; times here are Eastern and move an hour with DST. Scheduled runs often start
-            minutes to an hour late, and busy periods can drop one. A schedule is changed by editing the workflow file
+            late - hours late is common - and busy periods can drop one. A schedule is changed by editing the workflow file
             ({"✎"}) and committing - this panel only enables, disables and dispatches. Public repos with no commit
             for 60 days get their schedules switched off by GitHub; forks start with them off.</>}
         </div>
@@ -306,5 +320,89 @@ function JobRows({ job, now, busy, onAct, onEdit }: {
         </tr>
       ))}
     </>
+  );
+}
+
+function fmtDur(s: number | null | undefined): string {
+  if (s == null) return "";
+  return s < 90 ? `${s}s` : `${Math.round(s / 60)} min`;
+}
+function fmtDelay(m: number | null | undefined): string {
+  if (m == null) return "-";
+  return m < 60 ? `${m} min` : `${(m / 60).toFixed(m < 600 ? 1 : 0)} h`;
+}
+
+function HistoryPanel({ data, now }: { data: HistoryResponse | undefined; now: number }) {
+  const [jobId, setJobId] = useState("all");
+  if (!data) return <div className="sj-note">Reading the run log…</div>;
+  if (data.error) return <div className="sj-note sj-bad">{data.error}</div>;
+  const summary = data.summary ?? [];
+  const all = data.runs ?? [];
+  const runs = all.filter((r) => jobId === "all" || `${r.fullName}/${r.file}` === jobId)
+    .sort((a, b) => b.startedAt.localeCompare(a.startedAt)).slice(0, 80);
+  if (all.length === 0) {
+    return <div className="sj-note">No runs logged yet{data.months?.length ? ` for ${data.months.join(", ")}` : ""}. Statehouse's nightly run-log job fills this in.</div>;
+  }
+  return (
+    <div className="sj-scroll">
+      <div className="sj-muted sj-small">
+        {all.length} run{all.length === 1 ? "" : "s"}{data.months?.length ? ` in ${[...data.months].reverse().join(", ")}` : ""}
+        {data.source ? ` · ${data.source}` : ""} · click a job to filter the runs below
+      </div>
+      <table className="sj-table">
+        <thead>
+          <tr><th>Job</th><th>Runs</th><th>Results</th><th>Data commits</th><th>Typical start delay</th><th>Last run</th></tr>
+        </thead>
+        <tbody>
+          {summary.map((j) => (
+            <tr key={j.id} className={`sj-row ${j.failure ? "warn" : ""} sj-click ${jobId === j.id ? "sj-picked" : ""}`}
+              onClick={() => setJobId(jobId === j.id ? "all" : j.id)} title="Show this job's runs below">
+              <td>
+                <div className="sj-repo">{j.repo}</div>
+                <div className="sj-muted sj-small">{j.workflow} · <code>{j.file}</code></div>
+              </td>
+              <td data-label="Runs">{j.runs}<div className="sj-muted sj-small">{j.scheduled} scheduled{j.manual ? `, ${j.manual} manual` : ""}</div></td>
+              <td data-label="Results">
+                <span className="sj-result ok">{j.success} ✓</span>
+                {j.failure > 0 && <span className="sj-result bad"> · {j.failure} ✗</span>}
+                {j.other > 0 && <span className="sj-muted"> · {j.other} other</span>}
+              </td>
+              <td data-label="Data commits">
+                {j.commits}
+                {j.lastCommit && <div className="sj-muted sj-small"><a href={j.lastCommit.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>last {rel(j.lastCommit.startedAt, now)}</a></div>}
+              </td>
+              <td data-label="Typical delay">{fmtDelay(j.medianDelayMin)}</td>
+              <td data-label="Last run">{j.lastRun && <RunCell run={{ id: j.lastRun.id, status: "completed", conclusion: j.lastRun.conclusion, event: j.lastRun.event, createdAt: j.lastRun.startedAt, updatedAt: j.lastRun.startedAt, url: j.lastRun.url }} now={now} />}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div className="sj-upcoming">
+        <div className="sj-hist-head">
+          <span className="sj-upcoming-title">Runs, newest first</span>
+          <select className="sj-select" value={jobId} onChange={(e) => setJobId(e.target.value)}>
+            <option value="all">All jobs</option>
+            {summary.map((j) => <option key={j.id} value={j.id}>{j.repo} · {j.workflow}</option>)}
+          </select>
+        </div>
+        <table className="sj-table sj-runs">
+          <thead><tr><th>Started (Eastern)</th><th>Job</th><th>Trigger</th><th>Result</th><th>Late by</th><th>Took</th><th>Data</th></tr></thead>
+          <tbody>
+            {runs.map((r: JobRun) => (
+              <tr key={`${r.id}-${r.attempt ?? 1}`}>
+                <td>{fmtWhen(r.startedAt)}</td>
+                <td>{r.repo} · <span className="sj-muted">{r.workflow}</span></td>
+                <td>{r.event === "schedule" ? "schedule" : "manual"}</td>
+                <td><a className={`sj-result ${r.conclusion === "success" ? "ok" : r.conclusion ? "bad" : "busy"}`} href={r.url} target="_blank" rel="noreferrer">{r.conclusion ?? "?"}</a></td>
+                <td data-label="Late by">{r.event === "schedule" ? fmtDelay(r.delayMin) : ""}</td>
+                <td data-label="Took">{fmtDur(r.durationS)}</td>
+                <td>{r.commit ? <a href={r.commit.url} target="_blank" rel="noreferrer" title={r.commit.message}>{r.commit.sha}</a> : <span className="sj-muted">-</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }

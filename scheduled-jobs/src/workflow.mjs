@@ -23,7 +23,7 @@ export function parseWorkflow(text) {
 const DAY_MS = 86_400_000;
 const INACTIVITY_DAYS = 60; // GitHub's rule for public repos
 const INACTIVITY_WARN_DAYS = 45;
-const MISSED_GRACE_MS = 3 * 3_600_000; // GitHub can start scheduled runs late
+const MISSED_GRACE_MS = 12 * 3_600_000; // GitHub routinely starts scheduled runs hours late (5-7 h seen, Oct 2026)
 
 /**
  * Warnings for one job, most serious first: [{ level: "error"|"warn"|"info", text }].
