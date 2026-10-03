@@ -295,18 +295,18 @@ function JobRows({ job, now, busy, onAct, onEdit }: {
         <td><StateChip state={job.state} /></td>
         <td className="sj-actions">
           <div className="sj-btns">
-            {onGitHub && job.can.toggle && (
+            {onGitHub && job.can?.toggle && (
               <button className="sj-btn" disabled={dis} onClick={() => onAct(job, enabled ? "disable" : "enable")}>
                 {busy === job.id ? "…" : enabled ? "Disable" : "Enable"}
               </button>
             )}
-            {onGitHub && job.can.run && (
+            {onGitHub && job.can?.run && (
               <button className="sj-btn" disabled={dis || !enabled} onClick={() => onAct(job, "run")}
                 title={!enabled ? "Disabled workflows cannot be dispatched" : "Run it now (workflow_dispatch)"}>
                 Run now
               </button>
             )}
-            {job.can.edit && (
+            {job.can?.edit && (
               <button className="sj-btn" onClick={() => onEdit(job)} title="Edit the schedule (the workflow file)">{"✎"}</button>
             )}
           </div>
