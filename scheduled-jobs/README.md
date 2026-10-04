@@ -69,6 +69,11 @@ import ScheduledJobsDialog from "./vendor/scheduled-jobs/ScheduledJobsDialog";
 
 Several `views` give tabs (the Student app: Class + My forks).
 
+UI 1.1.2: the table resets `white-space`, `text-transform` and `cursor` on its
+own cells, so a host's bare `th`/`td` rules (StatehouseUI's grid uses
+`white-space: nowrap`) can no longer push the State and button columns off the
+right edge; the scroll area also scrolls sideways as a last resort.
+
 ## Tests
 
 `npm test` from the repo root (vitest): `scheduled-jobs/test/` covers cron parsing,
