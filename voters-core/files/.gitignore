@@ -1,0 +1,4 @@
+# Ohio Secretary of State county voter files: 80+ MB each, refreshed weekly,
+# and they carry dates of birth. Download to SourceData/ and convert locally;
+# only the derived react-app/public/data/voters.json is committed.
+SourceData/SOS_*.txt

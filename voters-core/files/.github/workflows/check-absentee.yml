@@ -1,0 +1,220 @@
+# When a new absentee / early-voting file lands in SourceData/, REFRESH THE
+# APP: re-run the absentee merge and the geocoder, build as the gate, commit
+# voters.json to main, and kick off the Pages deploy.
+#
+# SHARED FILE - from FleetShareableCodeComponents/voters-core. Edit it there and
+# sweep it with `python scripts\sync-shared-code.py --lib voters-core --apply`
+# from Statehouse; an edit made here is overwritten by the next sweep. It is
+# the same in every <County>CountyVoters repo: the repo and county come from
+# the repository's own name, and the sibling repos are discovered, not listed.
+#
+# WHERE THE FILE COMES FROM
+# Most Boards publish it on the state platform,
+# lookup.boe.ohio.gov/vtrapp/<county>/avreport.aspx. That site is behind
+# Cloudflare and answers GitHub's runners with HTTP 403 (tried 23 Oct 2026),
+# so this workflow does NOT download it. A scheduled task on lvp-01 runs
+# react-app/scripts/refresh-absentee.ps1 twice a day, which fetches the file
+# from a home connection and pushes ONLY the CSV when it has changed; that
+# push is what triggers this workflow. (register-absentee-task.ps1 sets the
+# task up.) A CSV saved by hand from the Board's page and pushed works the
+# same way. "Run workflow" re-merges whatever CSV is committed.
+#
+# SIBLING REPOS
+# The geocoder reads ../<County>CountyParcels (parcels.json, always) and, when
+# they exist, ../<County>CountyJurisdictions (jurisdictions.json) and
+# ../<County>CountyAddressPoints (address-points.json). They are PRIVATE, so
+# the checkouts use the FLEET_DATA_TOKEN secret: a fine-grained token with
+# Contents: read-only on them. A repo the token cannot see is treated as
+# absent - the job summary names each one, so a token missing a repo shows
+# up there as "not used".
+#
+# OFF SWITCH: delete the CSV after the election (the official history
+# reaches the SoS file) and unregister the scheduled task. A push that
+# deletes the CSV does not trigger this workflow.
+#
+# NOTE: this file must live at the REPO ROOT: .github/workflows/check-absentee.yml
+
+name: Merge the absentee file
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "SourceData/*absentee*.csv"
+  workflow_dispatch:
+
+permissions:
+  contents: write   # commit voters.json
+  actions: write    # dispatch deploy.yml afterwards
+
+concurrency:
+  group: check-absentee
+  cancel-in-progress: false
+
+env:
+  # "MahoningCountyVoters" -> sibling prefix "MahoningCounty"
+  REPO_NAME: ${{ github.event.repository.name }}
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      # Checked out into a subfolder so the sibling repos can sit beside it,
+      # the way C:\projects is laid out.
+      - uses: actions/checkout@v4
+        with:
+          path: ${{ env.REPO_NAME }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: ${{ env.REPO_NAME }}/react-app/package-lock.json
+
+      - name: Find the absentee file
+        id: local
+        shell: bash
+        working-directory: ${{ env.REPO_NAME }}
+        run: |
+          shopt -s nullglob nocaseglob
+          files=(SourceData/*absentee*.csv)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "### No absentee file" >> "$GITHUB_STEP_SUMMARY"
+            echo "SourceData/ holds no \`*absentee*.csv\`; nothing to merge." >> "$GITHUB_STEP_SUMMARY"
+            echo "active=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "active=true" >> "$GITHUB_OUTPUT"
+          info=$(node react-app/scripts/absentee-file-info.mjs "${files[0]}")
+          echo "$info"
+          node -e '
+            const o = JSON.parse(process.argv[1]);
+            console.log(`date=${o.latestDate}`); console.log(`voters=${o.voters}`); console.log(`returned=${o.returned}`);
+          ' "$info" >> "$GITHUB_OUTPUT"
+          node -e '
+            const o = JSON.parse(process.argv[1]);
+            console.log("### Absentee file\n");
+            console.log(`Data through **${o.latestDate}** - ${o.voters} voters issued a ballot, ${o.returned} returned (${o.format} format).`);
+          ' "$info" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Find the sibling repos
+        if: steps.local.outputs.active == 'true'
+        id: sib
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.FLEET_DATA_TOKEN || github.token }}
+          HAVE_TOKEN: ${{ secrets.FLEET_DATA_TOKEN != '' }}
+        run: |
+          prefix="${REPO_NAME%Voters}"
+          echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+          if [ "$HAVE_TOKEN" != "true" ]; then
+            echo "::warning title=FLEET_DATA_TOKEN not set::${prefix}Parcels is private; without the FLEET_DATA_TOKEN secret the checkout fails with 'Not Found'."
+          fi
+          echo "### Sibling repos" >> "$GITHUB_STEP_SUMMARY"
+          for kind in Jurisdictions AddressPoints; do
+            if gh api "repos/${GITHUB_REPOSITORY_OWNER}/${prefix}${kind}" --silent 2>/dev/null; then
+              echo "${kind}=true" >> "$GITHUB_OUTPUT"
+              echo "- ${prefix}${kind}: used" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "${kind}=false" >> "$GITHUB_OUTPUT"
+              echo "- ${prefix}${kind}: not used (absent, or the token cannot see it)" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+
+      - name: Check out the parcels
+        if: steps.local.outputs.active == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/${{ steps.sib.outputs.prefix }}Parcels
+          token: ${{ secrets.FLEET_DATA_TOKEN || github.token }}
+          path: ${{ steps.sib.outputs.prefix }}Parcels
+          sparse-checkout: react-app/public/data/parcels.json
+          sparse-checkout-cone-mode: false
+
+      - name: Check out the jurisdictions
+        if: steps.local.outputs.active == 'true' && steps.sib.outputs.Jurisdictions == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/${{ steps.sib.outputs.prefix }}Jurisdictions
+          token: ${{ secrets.FLEET_DATA_TOKEN || github.token }}
+          path: ${{ steps.sib.outputs.prefix }}Jurisdictions
+          sparse-checkout: react-app/public/data/jurisdictions.json
+          sparse-checkout-cone-mode: false
+
+      - name: Check out the address points
+        if: steps.local.outputs.active == 'true' && steps.sib.outputs.AddressPoints == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/${{ steps.sib.outputs.prefix }}AddressPoints
+          token: ${{ secrets.FLEET_DATA_TOKEN || github.token }}
+          path: ${{ steps.sib.outputs.prefix }}AddressPoints
+          sparse-checkout: react-app/public/data/address-points.json
+          sparse-checkout-cone-mode: false
+
+      - name: Merge the file and geocode
+        if: steps.local.outputs.active == 'true'
+        shell: bash
+        working-directory: ${{ env.REPO_NAME }}/react-app
+        run: |
+          ls -l ../../*County{Parcels,Jurisdictions,AddressPoints}/react-app/public/data/*.json 2>/dev/null || true
+          npm ci
+          npm run absentee 2>&1 | tee /tmp/absentee.log
+          {
+            echo "<details><summary>Merge and geocode log</summary>"
+            echo
+            echo '```'
+            cat /tmp/absentee.log
+            echo '```'
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build (the gate)
+        if: steps.local.outputs.active == 'true'
+        shell: bash
+        working-directory: ${{ env.REPO_NAME }}/react-app
+        run: npm run build
+
+      - name: Commit and push voters.json
+        if: steps.local.outputs.active == 'true'
+        id: push
+        shell: bash
+        working-directory: ${{ env.REPO_NAME }}
+        env:
+          DATE: ${{ steps.local.outputs.date }}
+          VOTERS: ${{ steps.local.outputs.voters }}
+          RETURNED: ${{ steps.local.outputs.returned }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add react-app/public/data/voters.json
+          if git diff --cached --quiet; then
+            echo "voters.json unchanged after the merge - not committing." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "committed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          {
+            echo "Merge absentee file - data through $DATE"
+            echo
+            echo "$VOTERS voters issued a ballot, $RETURNED returned."
+            echo
+            echo "voters.json re-merged and re-geocoded by the \"Merge the absentee file\""
+            echo "workflow, run $GITHUB_RUN_ID."
+          } > /tmp/commit-msg.txt
+          git commit -F /tmp/commit-msg.txt
+          # The scheduled task may have pushed meanwhile; replay on top.
+          git pull --rebase origin main
+          git push origin HEAD:main
+          echo "committed=true" >> "$GITHUB_OUTPUT"
+          echo "Committed and pushed: $(git rev-parse --short HEAD)" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # A push made with GITHUB_TOKEN does not trigger other workflows, so the
+      # Pages deploy is started explicitly.
+      - name: Deploy
+        if: steps.push.outputs.committed == 'true'
+        shell: bash
+        working-directory: ${{ env.REPO_NAME }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run deploy.yml --ref main
+          echo "Deploy started: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/workflows/deploy.yml" | tee -a "$GITHUB_STEP_SUMMARY"

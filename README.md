@@ -1,6 +1,6 @@
 # FleetShareableCodeComponents
 
-The source of truth for code shared across the Statehouse fleet. Five libraries
+The source of truth for code shared across the Statehouse fleet. Six libraries
 live here:
 
 | Library | What it is | Vendored into |
@@ -9,6 +9,7 @@ live here:
 | **address-lookup** | Ohio street address → Census geocoder → that county's parcels app | OhioCounties hub, OhioFleetAddressParcelSearchBrowserExtension |
 | **basemaps** | the base map switcher: Streets (CARTO) / Aerial (Ohio OSIP imagery) / Aerial + labels | every Leaflet map app (parcels, county specials, topic maps) |
 | **a11y** | WCAG 2.1 AA kit: keyboard list rows + sort headers, live result count, skip link, dialog focus handling, menu arrow keys, `?view=list`, pulse limits | opt-in: every map app as it is fixed (pilots: TrumbullHealthAccessMap, TrumbullCountyHydrants) |
+| **voters-core** | the whole `<County>CountyVoters` app (scripts, UI, workflow) as templates with the county's names as placeholders; rendered, not copied. `new-county-voters.py` scaffolds a county from it | every `*CountyVoters` app (3 of 88, Oct 2026) |
 | **scheduled-jobs** | every scheduled GitHub Actions job across a set of repos: plain-words schedule, next run, last result, warnings, enable / disable / run now. Two halves: `src/` (server) and `ui/` (React panel) | StatehouseUI, CSCI5802Fall2026Management, CSCI5802Fall2026Student |
 
 Until 27 September 2026 the master copy of parcels-core was whatever sat in
@@ -41,6 +42,9 @@ scheduled-jobs/
   ui/        -> copied to <app>/react-app/src/vendor/scheduled-jobs/          (VERSION 1.0.0)
                opt-in by folder, both halves
   test/      -> its suites (vitest; the server half also runs under node --test)
+voters-core/
+  files/     -> rendered into <County>CountyVoters\ (the repo root)          (VERSION 1.0.0)
+  templates/ -> county.ts, README.md, CHANGES.md: used once, by new-county-voters.py
 test-harness/
   county.ts  -> stands in for an app's src/config/county.ts during tests
 vitest.config.ts, package.json, .github/workflows/test.yml
@@ -77,6 +81,7 @@ not taken it yet (Statehouse issue #19).
    python scripts\sync-shared-code.py --lib a11y --apply
    python scripts\sync-shared-code.py --lib scheduled-jobs --apply
    python scripts\sync-shared-code.py --lib scheduled-jobs-ui --apply
+   python scripts\sync-shared-code.py --lib voters-core --apply
    ```
    then commit the changed repos through StatehouseUI.
 

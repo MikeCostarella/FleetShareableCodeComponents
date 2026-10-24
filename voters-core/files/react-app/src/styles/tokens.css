@@ -1,0 +1,76 @@
+/* Design tokens for the {{COUNTY}} County Ohio Voters lookup.
+   Same dark-navy palette used across the county civic-data apps, so this app
+   sits visually alongside TrumbullCountySchools, TrumbullCountyParcels, etc. */
+
+:root {
+  /* Backgrounds (dark navy theme) */
+  --bg-app: #1a2a3a;
+  --bg-header-1: #0d2137;
+  --bg-header-2: #1b3d5c;
+  --bg-stats: #0d1e2d;
+  --bg-search: #0f2335;
+  --bg-input: #1a2f42;
+  --bg-dialog-1: #0f2234;
+  --bg-dialog-2: #1a3250;
+  --bg-dialog-header-1: #0d2a44;
+  --bg-dialog-header-2: #1b4a6a;
+  --bg-legend: rgba(13, 33, 55, 0.92);
+  --bg-tooltip: rgba(10, 25, 40, 0.92);
+  --bg-card: rgba(255, 255, 255, 0.04);
+
+  /* Text */
+  --text-main: #eee;
+  --text-accent: #5bc4f5; /* cyan accent */
+  --text-muted: #8ab4cc;
+  --text-muted-2: #6a9ab5;
+  --text-card: #a0c4dd;
+  --text-card-label: #6a8ea8;
+  --text-coords: #556a7d;
+
+  /* Borders / accents */
+  --border-accent: #2e7dbe;
+  --border-accent-bright: #5bc4f5;
+  --border-card: #2a4a66;
+  --border-stats: #1e3a52;
+
+  /* Buttons */
+  --btn-primary: #2e7dbe;
+  --btn-primary-hover: #3a9ad6;
+  --btn-gmap: #1a7abf;
+  --btn-gmap-hover: #2490d9;
+  --btn-dir: #1a6e3a;
+  --btn-dir-hover: #22943d;
+  --btn-parcel: #5a3a8e;
+  --btn-parcel-hover: #7040b8;
+  --btn-clear: #334455;
+
+  /* Party swatches (mirror PARTY_COLORS in types/voter.ts) */
+  --party-r: #e05a55;
+  --party-d: #4a90d9;
+  --party-l: #e0b040;
+  --party-u: #8ab4cc;
+
+  /* Typography */
+  /* --- Data-viz ---
+     One cyan hue, six steps, monotone in lightness. Cyan and not blue because
+     the app surface IS blue (#1a2a3a) - a blue ramp's low end would dissolve
+     into the page. Validated against that surface rather than a generic dark:
+     light end 2.45:1, all adjacent lightness gaps clear, hue spread 6 degrees.
+     Steps 1-2 carry white text (6.98:1, 4.87:1); steps 3-6 carry --viz-ink-dark
+     (5.74:1 to 11.91:1), so every cell label is readable, not just tooltipped. */
+  --viz-1: #265f7c;
+  --viz-2: #2179a1;
+  --viz-3: #2196cb;
+  --viz-4: #35ade0;
+  --viz-5: #57c2f2;
+  --viz-6: #8ad6f8;
+  --viz-ink-dark: #061019;
+  /* Single-series marks. One color for every bar: these categories have no
+     natural order, and a value-ramp across them would double-encode the length
+     the bar already shows. 4.38:1 on the app surface. */
+  --viz-bar: #2196cb;
+  --viz-bar-emphasis: #57c2f2;
+  --viz-track: rgba(255, 255, 255, 0.06);
+
+  --font-stack: "Segoe UI", Arial, sans-serif;
+}

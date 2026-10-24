@@ -1,0 +1,1623 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root { height: 100%; }
+
+/* Nothing may ever scroll the page sideways. The voter table is far wider
+   than a phone and scrolls inside .table-scroll; without this a swipe that
+   reaches the end of that scroller chains to the document and drags the
+   header and stats out of view - which is exactly what it looked like on
+   an iPhone. overscroll-behavior on the scroller stops the chaining, and
+   these two stop anything else from trying. */
+html, body { overflow-x: hidden; max-width: 100%; }
+
+body {
+  font-family: var(--font-stack);
+  background: var(--bg-app);
+  color: var(--text-main);
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  /* Mobile browsers report 100vh as the height WITHOUT their toolbars, so the
+     footer sits under them. dvh is the visible height; vh stays as the
+     fallback for anything that does not know it. */
+  height: 100dvh;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* --- App chrome (header + stats) --- */
+#header {
+  background: linear-gradient(135deg, var(--bg-header-1) 0%, var(--bg-header-2) 50%, var(--bg-header-1) 100%);
+  border-bottom: 2px solid var(--border-accent);
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+.header-left { display: flex; align-items: center; gap: 14px; }
+.subtitle-short { display: none; }
+/* contents so the stats stay one flat flex row exactly as before. */
+.stats-more { display: contents; }
+.stats-toggle { display: none; }
+
+/* --- Main (hamburger) menu --- */
+#main-menu { position: relative; flex-shrink: 0; }
+#main-menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--border-accent);
+  border-radius: 8px;
+  background: rgba(46, 125, 190, 0.18);
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+#main-menu-btn:hover {
+  background: rgba(46, 125, 190, 0.4);
+  border-color: var(--border-accent-bright);
+}
+#main-menu-btn[aria-expanded="true"] {
+  background: rgba(46, 125, 190, 0.45);
+  border-color: var(--border-accent-bright);
+}
+.menu-bars {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 18px;
+  height: 13px;
+}
+.menu-bars span {
+  display: block;
+  height: 2px;
+  width: 100%;
+  border-radius: 2px;
+  background: var(--text-accent);
+}
+
+#main-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 1900; /* above stats/search/table; below the dialog overlay (2000) */
+  min-width: 200px;
+  background: var(--bg-legend);
+  border: 1px solid var(--border-accent);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+  padding: 6px;
+  overflow: hidden;
+}
+.menu-section-label {
+  font-size: 0.66em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted-2);
+  padding: 6px 10px 4px;
+}
+.menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-main);
+  font-size: 0.85em;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.menu-item:hover { background: rgba(46, 125, 190, 0.25); }
+.menu-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+  background: transparent;
+}
+.menu-item.active {
+  background: var(--btn-primary);
+  color: #fff;
+  font-weight: 600;
+}
+.menu-link {
+  text-decoration: none;
+  box-sizing: border-box;
+}
+#header .title-block h1 {
+  font-size: 1.4em;
+  color: var(--text-accent);
+  text-shadow: 0 0 10px rgba(91, 196, 245, 0.4);
+  letter-spacing: 1px;
+}
+#header .title-block p {
+  font-size: 0.75em;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+#header .meta {
+  text-align: right;
+  font-size: 0.72em;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+#header .meta span { color: var(--text-accent); }
+.meta-credit { vertical-align: middle; }
+
+/* Header "?" help button. */
+#help-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  margin-right: 10px;
+  vertical-align: middle;
+}
+#help-btn:hover { background: rgba(255, 255, 255, 0.18); }
+
+/* Header "Reports" button - deliberately louder than the "?" beside it. */
+#reports-btn {
+  height: 28px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid var(--btn-primary-hover);
+  background: var(--btn-primary);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  margin-right: 10px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+#reports-btn:hover { background: var(--btn-primary-hover); }
+#reports-btn.active {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+#reports-btn:focus-visible, #help-btn:focus-visible { outline: 2px solid var(--text-accent); outline-offset: 2px; }
+
+#stats-bar {
+  background: var(--bg-stats);
+  border-bottom: 1px solid var(--border-stats);
+  padding: 5px 20px;
+  display: flex;
+  /* Wraps at every width. Two counts plus one per election plus one per party
+     is 17 items at eleven elections - 2,742px on a 1,700px screen - and with
+     #root clipping the overflow the tail was simply unreachable: no scrollbar,
+     no ellipsis, five counts just gone. It grows with every election added, so
+     wrapping is the only version of this bar that keeps working. */
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  font-size: 0.75em;
+  color: var(--text-muted-2);
+  flex-shrink: 0;
+  align-items: center;
+}
+#stats-bar .stat { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+#stats-bar .stat b { color: var(--text-accent); }
+#stats-bar .stat + .stat::before {
+  content: "|";
+  color: var(--border-stats);
+  margin-right: 14px;
+}
+.party-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  flex-shrink: 0;
+}
+
+/* --- Search / filter bar --- */
+#search-bar {
+  background: var(--bg-search);
+  border-bottom: 1px solid var(--border-stats);
+  padding: 8px 16px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+/* The box and its clear button share a relative wrapper, so the X can sit
+   inside the field rather than beside it. */
+.search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 200px;
+  max-width: 360px;
+  display: flex;
+}
+.search-wrap input {
+  width: 100%;
+  /* Right padding leaves room for the X so long text never runs under it. */
+  padding: 6px 30px 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-accent);
+  background: var(--bg-input);
+  color: var(--text-main);
+  font-size: 0.85em;
+  font-family: inherit;
+  outline: none;
+}
+.search-wrap input:focus {
+  border-color: var(--border-accent-bright);
+  box-shadow: 0 0 6px rgba(91, 196, 245, 0.3);
+}
+/* Scoped with the #search-bar id: the generic "#search-bar button" rule above
+   is more specific than a bare class, and its 14px side padding inflates this
+   to 28px wide, pushing it under the text. */
+#search-bar .search-clear {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  width: 19px;
+  height: 19px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+#search-bar .search-clear:hover {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+#search-bar button {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: none;
+  background: var(--btn-primary);
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.82em;
+  transition: background 0.2s;
+  white-space: nowrap;
+}
+#search-bar button:hover { background: var(--btn-primary-hover); }
+#search-bar button:disabled { opacity: 0.45; cursor: default; }
+/* Secondary, not the primary blue: it undoes rather than does. */
+#search-bar .clear-filters {
+  background: none;
+  border: 1px solid var(--border-accent);
+  color: var(--text-accent);
+  padding: 5px 12px;
+}
+#search-bar .clear-filters:hover {
+  background: var(--bg-input);
+  border-color: var(--border-accent-bright);
+}
+
+/* --- Multi-select filter dropdown --- */
+.jur-filter { position: relative; }
+.jur-filter-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-accent);
+  background: var(--bg-input);
+  color: var(--text-main);
+  cursor: pointer;
+  font-size: 0.82em;
+  white-space: nowrap;
+}
+.jur-filter-btn b { color: var(--text-accent); font-weight: 600; }
+.jur-caret { margin-left: 4px; font-size: 0.85em; }
+.jur-filter-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 1500;
+  width: 280px;
+  max-width: calc(100vw - 24px);
+  background: var(--bg-legend);
+  border: 1px solid var(--border-accent);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+.jur-filter-actions {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-stats);
+}
+.jur-filter-actions button {
+  flex: 1;
+  padding: 4px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--border-stats);
+  background: rgba(46, 125, 190, 0.2);
+  color: var(--text-accent);
+  cursor: pointer;
+  font-size: 0.78em;
+}
+.jur-filter-actions button:hover { background: rgba(46, 125, 190, 0.4); }
+.jur-filter-list { max-height: 260px; overflow-y: auto; padding: 6px 0; }
+.jur-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  cursor: pointer;
+  font-size: 0.82em;
+  color: var(--text-card);
+}
+.jur-filter-row:hover { background: rgba(255, 255, 255, 0.05); }
+.jur-filter-row input { cursor: pointer; margin: 0; flex-shrink: 0; }
+.jur-filter-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.jur-filter-count { color: var(--text-muted); font-size: 0.9em; flex-shrink: 0; }
+.jur-filter-search {
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-bottom: 1px solid var(--border-stats);
+  background: var(--bg-input);
+  color: var(--text-main);
+  font-size: 0.82em;
+  outline: none;
+}
+.jur-filter-search::placeholder { color: var(--text-muted); }
+.jur-filter-empty {
+  padding: 12px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.82em;
+}
+
+/* --- Voter table --- */
+#account-table-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-app);
+}
+.table-caption {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  font-size: 0.78em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-stats);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.table-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  /* Keep the sideways swipe inside the table. */
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Sort control that stands in for the column headers the card layout hides.
+   Shown only below the breakpoint. */
+.card-sort { display: none; }
+#account-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82em;
+  color: var(--text-main);
+}
+#account-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  padding: 9px 14px;
+  background: var(--bg-stats);
+  color: var(--text-accent);
+  border-bottom: 2px solid var(--border-accent);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+#account-table thead th:hover { background: var(--bg-header-1); }
+#account-table thead th.sorted { color: var(--border-accent-bright); }
+#account-table thead th.num { text-align: right; }
+.sort-caret { font-size: 0.85em; }
+#account-table tbody td {
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--border-stats);
+  white-space: nowrap;
+}
+#account-table tbody td.num {
+  text-align: right;
+  color: var(--text-coords);
+  font-variant-numeric: tabular-nums;
+}
+#account-table tbody tr { cursor: pointer; transition: background 0.12s; }
+#account-table tbody tr:hover { background: rgba(46, 125, 190, 0.18); }
+.empty-row td {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 28px 14px !important;
+  cursor: default;
+}
+
+/* Party pill shown in the table and the detail dialog. */
+.party-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 0.92em;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-card);
+}
+
+/* Election badges in the list and the voter dialog. */
+.vote-badges { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.vote-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.9em;
+  white-space: nowrap;
+  background: rgba(91, 196, 245, 0.12);
+  border: 1px solid var(--border-card);
+  color: var(--text-card);
+}
+
+/* "Voting history" toggle beside the most recent election badge. */
+.history-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-accent);
+  background: rgba(46, 125, 190, 0.18);
+  color: var(--text-accent);
+  font: inherit;
+  font-size: 0.9em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+.history-btn:hover {
+  background: rgba(46, 125, 190, 0.4);
+  border-color: var(--border-accent-bright);
+}
+.history-caret { font-size: 0.85em; }
+
+/* The panel it opens: every election on file, newest first. */
+.vote-history {
+  margin: 8px 0 2px;
+  border: 1px solid var(--border-card);
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.18);
+}
+.vote-history-head {
+  padding: 6px 10px;
+  font-size: 0.78em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-card);
+}
+.vote-history-head b { color: var(--text-accent); }
+.vote-history-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  font-size: 0.8em;
+  color: var(--text-muted-2);
+}
+.vote-history-row + .vote-history-row { border-top: 1px solid var(--border-stats); }
+.vote-history-row.voted { color: var(--text-card); }
+.vote-history-mark {
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+  color: var(--text-coords);
+}
+.vote-history-row.voted .vote-history-mark { color: #4caf7d; font-weight: 700; }
+.vote-history-label { flex: 1 1 auto; }
+.vote-history-state { flex-shrink: 0; font-size: 0.92em; }
+.vote-history-row.voted .vote-history-state { color: var(--text-accent); }
+/* Not on the ballot for this voter — dimmer than a no-show, and never red. */
+.vote-history-row.ineligible { color: var(--text-coords); }
+.vote-history-row.ineligible .vote-history-state { font-style: italic; }
+
+/* Marks an election that only part of the county could vote in. */
+.scope-tag {
+  font-size: 0.85em;
+  color: var(--text-muted-2);
+  font-style: italic;
+}
+/* ...and one still being voted, which reads warmer than "part of county". */
+.scope-tag.live-tag { color: #e0b040; }
+
+/* --- Early voting (while the absentee file is merged in) ---------------- */
+
+/* The election in progress in the history panel: not voted YET is a
+   different thing from did not vote, so it keeps the voted row's weight
+   with an ellipsis for a mark instead of a dot. */
+.vote-history-row.live { color: var(--text-card); }
+.vote-history-row.live .vote-history-mark { color: #e0b040; }
+.vote-history-row.live .vote-history-state { color: var(--text-muted); }
+
+/* Status pill in the list, the dialog and the hover card. */
+.ballot-pill { white-space: nowrap; }
+.ballot-when { color: var(--text-muted); font-size: 0.92em; }
+.ballot-none { color: var(--text-coords); }
+
+/* Election summary line pinned above the Early voting filter's options. */
+.ballot-panel-head {
+  padding: 8px 10px;
+  font-size: 0.78em;
+  line-height: 1.35;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-stats);
+}
+.ballot-panel-head b { color: var(--text-accent); }
+
+/* Party / early-voting switch at the top of the map legend. */
+.legend-colorby {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+/* Any/All switch at the top of the Elections filter panel. */
+.match-toggle {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-stats);
+}
+.match-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.match-toggle-label {
+  font-size: 0.8em;
+  color: var(--text-card-label);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.match-seg {
+  display: inline-flex;
+  border: 1px solid var(--border-accent);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.match-seg button {
+  padding: 3px 12px;
+  border: none;
+  background: var(--bg-input);
+  color: var(--text-muted);
+  cursor: pointer;
+  font: 0.8em var(--font-stack);
+}
+.match-seg button + button { border-left: 1px solid var(--border-accent); }
+.match-seg button:hover { background: rgba(46, 125, 190, 0.3); color: var(--text-main); }
+.match-seg button.active {
+  background: var(--btn-primary);
+  color: #fff;
+  font-weight: 600;
+}
+.match-toggle-hint {
+  margin-top: 5px;
+  font-size: 0.76em;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+/* --- Pagination --- */
+#pager {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 16px;
+  border-top: 1px solid var(--border-stats);
+  background: var(--bg-stats);
+  font-size: 0.78em;
+  color: var(--text-muted-2);
+  flex-wrap: wrap;
+}
+#pager button {
+  padding: 4px 10px;
+  border-radius: 5px;
+  border: 1px solid var(--border-stats);
+  background: rgba(46, 125, 190, 0.2);
+  color: var(--text-accent);
+  cursor: pointer;
+  font-size: 1em;
+}
+#pager button:hover:not(:disabled) { background: rgba(46, 125, 190, 0.4); }
+#pager button:disabled { opacity: 0.35; cursor: default; }
+#pager select {
+  padding: 3px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--border-stats);
+  background: var(--bg-input);
+  color: var(--text-main);
+  font-size: 1em;
+  font-family: inherit;
+}
+#pager .pager-spacer { flex: 1 1 auto; }
+#pager b { color: var(--text-accent); }
+
+/* --- Map view --- */
+#map-wrap { flex: 1; min-height: 0; position: relative; }
+#map-wrap .leaflet-container {
+  background: #0d1e2d;
+  font-family: var(--font-stack);
+}
+/* Leaflet's default controls are white-on-white against the dark shell. */
+#map-wrap .leaflet-bar a {
+  background: var(--bg-legend);
+  color: var(--text-accent);
+  border-bottom-color: var(--border-stats);
+}
+#map-wrap .leaflet-bar a:hover { background: rgba(46, 125, 190, 0.4); }
+#map-wrap .leaflet-control-attribution {
+  background: rgba(13, 33, 55, 0.85);
+  color: var(--text-muted-2);
+}
+#map-wrap .leaflet-control-attribution a { color: var(--text-accent); }
+
+/* Party + boundary key, bottom-right over the map. */
+#legend {
+  position: absolute;
+  bottom: 22px;
+  right: 12px;
+  z-index: 1000;
+  background: var(--bg-legend);
+  border: 1px solid var(--border-accent);
+  border-radius: 8px;
+  font-size: 0.78em;
+  color: var(--text-card);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+  min-width: 190px;
+  max-width: calc(100vw - 24px);
+  overflow: hidden;
+}
+#legend-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  cursor: pointer;
+  background: rgba(46, 125, 190, 0.25);
+  color: var(--text-accent);
+  font-weight: 600;
+  user-select: none;
+}
+#legend-header:hover { background: rgba(46, 125, 190, 0.4); }
+#legend-body { padding: 10px 12px; }
+.legend-row { display: flex; align-items: center; gap: 9px; margin: 5px 0; }
+.legend-dot {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.6);
+  flex-shrink: 0;
+}
+.legend-name { flex: 1 1 auto; }
+.legend-count { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.legend-subhead {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-stats);
+  color: var(--text-accent);
+  font-weight: 600;
+}
+.legend-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 0;
+  cursor: pointer;
+  user-select: none;
+}
+.legend-toggle-row input { cursor: pointer; margin: 0; }
+.legend-line {
+  display: inline-block;
+  width: 18px;
+  height: 0;
+  border-top-width: 2.5px;
+  flex-shrink: 0;
+}
+
+/* Cursor-following card over the map. */
+.hover-card {
+  position: fixed;
+  z-index: 1600;
+  pointer-events: none;
+  max-width: 260px;
+  padding: 8px 11px;
+  background: var(--bg-tooltip);
+  border: 1px solid var(--border-accent);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
+  font-size: 0.78em;
+  color: var(--text-card);
+  line-height: 1.45;
+}
+.hover-card .hover-name { color: var(--text-accent); font-weight: 700; }
+.hover-card .hover-line { display: flex; align-items: center; gap: 6px; }
+.hover-card .hover-hint {
+  margin-top: 4px;
+  color: var(--text-card-label);
+  font-size: 0.92em;
+}
+
+/* "N not on the map" note in the list caption. */
+.caption-note { color: var(--text-muted-2); }
+
+/* --- Detail dialog --- */
+#dialog-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 2000;
+  align-items: center;
+  justify-content: center;
+}
+#dialog-overlay.active { display: flex; }
+
+#dialog {
+  background: linear-gradient(160deg, var(--bg-dialog-1) 0%, var(--bg-dialog-2) 100%);
+  border: 1px solid var(--border-accent);
+  border-radius: 12px;
+  width: 420px;
+  max-width: 95vw;
+  /* Column layout so the header stays pinned and only the body scrolls: a
+     tall form used to push its own title - and its close button - off the top.
+     overflow:hidden keeps the rounded corners clipping the body. */
+  max-height: 85vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7), 0 0 20px rgba(46, 125, 190, 0.2);
+  animation: dialogIn 0.2s ease;
+}
+@keyframes dialogIn {
+  from { transform: scale(0.9); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+#dialog-header {
+  background: linear-gradient(135deg, var(--bg-dialog-header-1), var(--bg-dialog-header-2));
+  border-bottom: 1px solid var(--border-accent);
+  border-radius: 12px 12px 0 0;
+  padding: 14px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;  flex-shrink: 0;
+}
+#dialog-header h2 { font-size: 1em; color: var(--text-accent); }
+#dialog-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1.4em;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+#dialog-close:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+#dialog-body { padding: 18px; flex: 1; min-height: 0; overflow-y: auto; }
+
+/* Pinned action strip. Anything in here stays visible while the body scrolls -
+   used by the Suggest an Edit form so Submit and Copy are always reachable. */
+#dialog-footer {
+  flex-shrink: 0;
+  padding: 10px 18px 14px;
+  border-top: 1px solid var(--border-card);
+  background: rgba(13, 34, 52, 0.6);
+}
+#dialog-footer .btn-row { margin-top: 0; }
+#dialog-footer .se-changecount { margin: 0 0 8px; }
+
+.acct-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+.acct-card:last-child { margin-bottom: 0; }
+.acct-num { font-size: 1em; font-weight: bold; color: var(--text-accent); margin-bottom: 6px; }
+.acct-row { font-size: 0.82em; color: var(--text-card); margin: 3px 0; display: flex; gap: 8px; }
+.acct-row .label { color: var(--text-card-label); min-width: 92px; flex-shrink: 0; }
+.acct-row a { color: var(--text-accent); text-decoration: none; }
+.acct-row a:hover { color: #fff; text-decoration: underline; }
+
+.btn-row { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+.map-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 6px;
+  font-size: 0.75em;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 500;
+}
+.btn-gmap { background: var(--btn-gmap); color: #fff; }
+.btn-gmap:hover { background: var(--btn-gmap-hover); }
+.btn-dir { background: var(--btn-dir); color: #fff; }
+.btn-dir:hover { background: var(--btn-dir-hover); }
+.btn-copy { background: var(--btn-clear); color: #fff; }
+.btn-copy:hover { background: #44586d; }
+.btn-onmap { background: var(--btn-primary); color: #fff; }
+.btn-onmap:hover { background: var(--btn-primary-hover); }
+
+/* --- "Suggest an Edit" form (same markup as the other fleet apps) --- */
+.suggest-edit-dialog { width: 460px; }
+.se-intro {
+  font-size: 0.78em;
+  color: var(--text-muted-2);
+  margin: 0 0 14px;
+  line-height: 1.45;
+}
+.se-field { display: flex; flex-direction: column; gap: 3px; margin-bottom: 10px; }
+.se-field label {
+  font-size: 0.72em;
+  color: var(--text-card-label);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.se-field input,
+.se-field select,
+.se-field textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--border-card);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-main);
+  font: 0.85em var(--font-stack);
+  outline: none;
+  transition: border-color 0.15s;
+}
+.se-field input:focus,
+.se-field select:focus,
+.se-field textarea:focus { border-color: var(--border-accent-bright); }
+.se-field input[readonly] { color: var(--text-muted); }
+.se-field textarea { resize: vertical; }
+.se-field input::placeholder,
+.se-field textarea::placeholder { color: var(--text-muted); }
+.se-row { display: flex; gap: 10px; }
+.se-row .se-grow { flex: 1; }
+.se-row .se-zip { width: 96px; flex-shrink: 0; }
+.se-changecount {
+  font-size: 0.74em;
+  color: var(--text-muted);
+  margin: 2px 0 10px;
+}
+.map-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-edit { background: var(--btn-parcel); color: #fff; }
+.btn-edit:hover { background: var(--btn-parcel-hover); }
+
+/* Help dialog content. */
+/* --- Side drawer (fleet pattern): slides in from the right, non-modal --- */
+.side-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 380px;
+  max-width: 92vw;
+  background: linear-gradient(160deg, var(--bg-dialog-1) 0%, var(--bg-dialog-2) 100%);
+  color: var(--text-main);
+  border-left: 1px solid var(--border-accent);
+  box-shadow: -6px 0 22px rgba(0, 0, 0, 0.45);
+  z-index: 5600;
+  transform: translateX(100%);
+  transition: transform 0.22s ease;
+  display: flex;
+  flex-direction: column;
+}
+.side-drawer.open { transform: translateX(0); }
+.side-drawer:focus { outline: none; }
+.side-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, var(--bg-dialog-header-1) 0%, var(--bg-dialog-header-2) 100%);
+  border-bottom: 1px solid var(--border-accent);
+  flex-shrink: 0;
+}
+.side-drawer-head h2 { margin: 0; font-size: 1.05em; color: var(--text-accent); }
+.side-drawer-close {
+  background: none;
+  border: 0;
+  color: var(--text-main);
+  font-size: 1.7em;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.side-drawer-close:hover { color: var(--text-accent); }
+.side-drawer-body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px 24px; }
+@media (prefers-reduced-motion: reduce) { .side-drawer { transition: none; } }
+
+/* Help pane contents. */
+.help-body { font-size: 0.9em; line-height: 1.5; }
+.help-body p { margin: 0 0 8px; }
+.help-body ul { margin: 0 0 8px 18px; }
+.help-body li { margin: 3px 0; }
+.help-toc { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid var(--border-stats); }
+.help-toc button {
+  background: var(--bg-input);
+  border: 1px solid var(--border-accent);
+  color: var(--text-main);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font: inherit;
+  font-size: 0.85em;
+  cursor: pointer;
+}
+.help-toc button:hover { border-color: var(--border-accent-bright); color: var(--text-accent); }
+.help-section { padding: 12px 0; border-top: 1px solid var(--border-stats); }
+.help-section:first-of-type { border-top: none; }
+.help-section:focus { outline: none; }
+.help-section:focus h3 { text-decoration: underline; }
+.help-section h3 { margin: 0 0 6px; font-size: 1em; font-weight: 600; color: #7cc0f0; }
+.help-section code { background: var(--bg-input); padding: 1px 4px; border-radius: 3px; }
+
+/* --- Loading / error states --- */
+#state-msg {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 0.9em;
+  padding: 24px;
+  text-align: center;
+}
+#state-msg .err { color: #f4736c; }
+
+/* --- Footer / build stamp --- */
+#footer {
+  background: var(--bg-stats);
+  border-top: 1px solid var(--border-stats);
+  padding: 4px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.7em;
+  color: var(--text-muted-2);
+  flex-shrink: 0;
+  gap: 10px;
+}
+#footer #build-time { color: var(--text-muted); }
+
+/* ============================================================
+   Reports
+   ============================================================ */
+#reports-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-app);
+}
+.reports-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border-stats);
+  background: var(--bg-stats);
+}
+.reports-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.reports-tab {
+  background: var(--bg-input);
+  border: 1px solid var(--border-stats);
+  color: var(--text-card);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 0.82em;
+  cursor: pointer;
+}
+.reports-tab:hover { border-color: var(--border-accent); }
+.reports-tab.active {
+  background: var(--btn-primary);
+  border-color: var(--border-accent-bright);
+  color: #fff;
+}
+.reports-scope { font-size: 0.78em; color: var(--text-muted); }
+.reports-scope b { color: var(--text-accent); }
+.link-btn {
+  background: none;
+  border: 0;
+  color: var(--text-accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+}
+.reports-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; }
+.reports-empty { padding: 28px 16px; color: var(--text-muted); }
+.reports-basis {
+  font-size: 0.78em;
+  color: var(--text-muted);
+  border-left: 3px solid var(--border-accent);
+  padding: 6px 0 6px 10px;
+  margin-bottom: 18px;
+  max-width: 90ch;
+}
+.report { max-width: 1100px; margin-bottom: 30px; }
+.report h2 { font-size: 1.15em; color: var(--text-accent); margin-bottom: 6px; }
+.report h3 {
+  font-size: 0.95em;
+  color: var(--text-card);
+  margin: 22px 0 4px;
+}
+.report-lede {
+  font-size: 0.8em;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  max-width: 80ch;
+  line-height: 1.5;
+}
+.report-lede code { color: var(--text-card); }
+.report-export, .report-more {
+  margin-top: 14px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-accent);
+  color: var(--text-accent);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 0.8em;
+  cursor: pointer;
+}
+.report-export:hover, .report-more:hover { background: var(--btn-primary); color: #fff; }
+.report-more { margin-right: 8px; }
+.report-switch { display: flex; gap: 6px; margin-bottom: 10px; }
+.report-switch button {
+  background: var(--bg-input);
+  border: 1px solid var(--border-stats);
+  color: var(--text-card);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 0.8em;
+  cursor: pointer;
+}
+.report-switch button.active {
+  background: var(--btn-primary);
+  border-color: var(--border-accent-bright);
+  color: #fff;
+}
+
+/* --- bars --- */
+.viz-bars { display: flex; flex-direction: column; gap: 2px; }
+.viz-caption { font-size: 0.78em; color: var(--text-muted); margin-bottom: 4px; }
+.viz-bar-row {
+  display: grid;
+  grid-template-columns: minmax(96px, 190px) 1fr minmax(52px, auto);
+  align-items: center;
+  gap: 10px;
+  padding: 3px 0;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+}
+.viz-bar-row.is-clickable { cursor: pointer; }
+.viz-bar-row.is-clickable:hover .viz-bar-track { background: rgba(255, 255, 255, 0.11); }
+.viz-bar-label { font-size: 0.8em; color: var(--text-card); }
+.viz-bar-note { color: var(--text-muted); }
+.viz-bar-track {
+  height: 14px;
+  background: var(--viz-track);
+  border-radius: 0 4px 4px 0;
+  overflow: hidden;
+}
+.viz-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--viz-bar);
+  /* Data end rounded, baseline end square: the bar is anchored to zero. */
+  border-radius: 0 4px 4px 0;
+}
+.viz-bar-fill.emphasis { background: var(--viz-bar-emphasis); }
+/* A bar broken into coloured segments (early votes by party). */
+.viz-bar-stack {
+  display: flex;
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+  overflow: hidden;
+}
+.viz-bar-seg { display: block; height: 100%; flex-basis: 0; min-width: 0; }
+.viz-bar-seg + .viz-bar-seg { border-left: 1px solid rgba(13, 30, 45, 0.6); }
+/* Party key above the stacked bars: swatch, name, count, share. */
+.viz-key { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 4px 0 10px; font-size: 0.82em; }
+.viz-key-item { display: inline-flex; align-items: center; gap: 6px; color: var(--text-card); }
+.viz-key-item b { color: var(--text-main); font-variant-numeric: tabular-nums; }
+.viz-key-item .viz-key-share { color: var(--text-muted); }
+.viz-key-item.is-clickable { cursor: pointer; background: none; border: 0; padding: 0; font: inherit; }
+.viz-key-item.is-clickable:hover b { color: var(--text-accent); }
+.viz-bar-value {
+  font-size: 0.8em;
+  color: var(--text-main);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* --- heatmap --- */
+.viz-heat-wrap { max-width: 100%; }
+.viz-heat-axis-note {
+  display: flex;
+  /* Sized to the grid, not the page, so "…also voted in" sits over the columns
+     it names instead of drifting to the far right of a wide window. */
+  width: max-content;
+  max-width: 100%;
+  gap: 40px;
+  justify-content: space-between;
+  font-size: 0.72em;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.viz-heat-scroll { overflow-x: auto; overscroll-behavior-x: contain; }
+.viz-heat { border-collapse: separate; border-spacing: 2px; font-size: 0.72em; }
+.viz-heat th {
+  color: var(--text-muted);
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+  padding: 2px 6px 2px 0;
+}
+.viz-heat thead th { vertical-align: bottom; text-align: center; padding: 0 2px 4px; }
+.viz-heat thead th span { display: block; width: 58px; white-space: normal; line-height: 1.2; }
+.viz-heat-corner { width: 130px; }
+.viz-heat tbody th { position: sticky; left: 0; background: var(--bg-app); z-index: 1; }
+.viz-heat-cell {
+  display: block;
+  padding: 7px 4px;
+  border-radius: 3px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.viz-heat-cell.diagonal { background: rgba(255, 255, 255, 0.04); color: var(--text-coords); cursor: default; }
+.viz-heat-cell.step-1 { background: var(--viz-1); color: #fff; }
+.viz-heat-cell.step-2 { background: var(--viz-2); color: #fff; }
+.viz-heat-cell.step-3 { background: var(--viz-3); color: var(--viz-ink-dark); }
+.viz-heat-cell.step-4 { background: var(--viz-4); color: var(--viz-ink-dark); }
+.viz-heat-cell.step-5 { background: var(--viz-5); color: var(--viz-ink-dark); }
+.viz-heat-cell.step-6 { background: var(--viz-6); color: var(--viz-ink-dark); }
+.viz-scale { display: flex; align-items: center; gap: 2px; margin-top: 10px; }
+.viz-scale-end { font-size: 0.7em; color: var(--text-muted); margin: 0 6px; }
+.viz-scale-swatch { width: 26px; height: 10px; border-radius: 2px; }
+.viz-scale-swatch.step-1 { background: var(--viz-1); }
+.viz-scale-swatch.step-2 { background: var(--viz-2); }
+.viz-scale-swatch.step-3 { background: var(--viz-3); }
+.viz-scale-swatch.step-4 { background: var(--viz-4); }
+.viz-scale-swatch.step-5 { background: var(--viz-5); }
+.viz-scale-swatch.step-6 { background: var(--viz-6); }
+
+/* --- stat tiles --- */
+.viz-stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.viz-stat {
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: 8px;
+  padding: 12px 16px;
+  min-width: 170px;
+  flex: 1 1 200px;
+  max-width: 320px;
+}
+/* Proportional figures on purpose: tabular-nums makes a large standalone
+   number look loose. */
+.viz-stat-value { font-size: 1.9em; color: var(--text-accent); line-height: 1.1; }
+.viz-stat-label { font-size: 0.78em; color: var(--text-card); margin-top: 4px; }
+.viz-stat-note { font-size: 0.72em; color: var(--text-muted); margin-top: 6px; }
+
+/* --- line --- */
+.viz-line-wrap { max-width: 760px; }
+.viz-line { width: 100%; height: 150px; display: block; }
+.viz-axis { stroke: var(--border-stats); stroke-width: 1; }
+.viz-line-path { fill: none; stroke: var(--viz-bar); stroke-width: 2; }
+.viz-line-dot { fill: var(--viz-6); stroke: var(--bg-app); stroke-width: 2; }
+.viz-line-ticks {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7em;
+  color: var(--text-muted);
+  margin-top: -14px;
+}
+
+/* --- ranked table --- */
+.viz-rank-scroll { overflow-x: auto; overscroll-behavior-x: contain; }
+.viz-rank { border-collapse: collapse; width: 100%; font-size: 0.8em; }
+.viz-rank thead th {
+  text-align: left;
+  color: var(--text-accent);
+  border-bottom: 1px solid var(--border-accent);
+  padding: 5px 10px;
+  white-space: nowrap;
+}
+.viz-rank thead th.num, .viz-rank td.num { text-align: right; }
+.viz-rank tbody th {
+  position: relative;
+  text-align: left;
+  font-weight: 400;
+  color: var(--text-main);
+  padding: 6px 10px;
+  min-width: 150px;
+}
+.viz-rank tbody td {
+  padding: 6px 10px;
+  color: var(--text-card);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.viz-rank tbody tr { border-bottom: 1px solid var(--border-stats); }
+.viz-rank tbody tr.is-clickable { cursor: pointer; }
+.viz-rank tbody tr.is-clickable:hover { background: rgba(255, 255, 255, 0.05); }
+/* The bar sits behind the name rather than in its own column: it is the
+   comparison, the figures beside it are the values. */
+.viz-rank-bar {
+  position: absolute;
+  left: 0;
+  top: 3px;
+  bottom: 3px;
+  background: var(--viz-bar);
+  opacity: 0.28;
+  border-radius: 0 4px 4px 0;
+}
+.viz-rank-name { position: relative; }
+
+/* --- counts that are links --- */
+/* A count that opens the voters behind it: a button, drawn as a link, so the
+   number keeps its place in the sentence or cell it sits in. Dotted until
+   hovered or focused - every count in the app is one of these, and a solid
+   underline on all of them would be noise. */
+.count-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: var(--border-accent);
+  text-underline-offset: 2px;
+  font-variant-numeric: inherit;
+}
+.count-link:hover,
+.count-link:focus-visible {
+  color: var(--text-accent);
+  text-decoration-style: solid;
+  text-decoration-color: currentColor;
+}
+.viz-stat-value .count-link { text-underline-offset: 4px; }
+#legend .legend-count .count-link:hover { color: var(--text-main); }
+/* A party segment inside a stacked bar, when it is its own link. */
+.viz-bar-seg.is-clickable { border: 0; padding: 0; cursor: pointer; }
+.viz-bar-seg.is-clickable:hover,
+.viz-bar-seg.is-clickable:focus-visible { filter: brightness(1.3); }
+/* The label of a bar whose segments are links: the bar's own click lives on
+   this button, so the keyboard still reaches it. */
+.viz-bar-pick {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  display: block;
+}
+.viz-bar-pick:hover .viz-bar-label,
+.viz-bar-pick:focus-visible .viz-bar-label { color: var(--text-accent); }
+
+/* The strip under the filter bar that lists every drill applied. */
+#drill-bar {
+  background: var(--bg-search);
+  border-bottom: 1px solid var(--border-stats);
+  padding: 5px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 8px;
+  font-size: 0.78em;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.drill-bar-label { margin-right: 4px; }
+#drill-bar .link-btn { margin-left: 6px; }
+
+/* The chip for one drill: a count that was clicked. */
+.caption-drill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-accent);
+  border-radius: 999px;
+  padding: 1px 4px 1px 10px;
+  color: var(--text-accent);
+}
+.caption-drill button {
+  background: none;
+  border: 0;
+  color: var(--text-accent);
+  font: inherit;
+  font-size: 1.15em;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+/* ============================================================
+   Mobile / narrow-viewport treatment (<= 640px)
+   ============================================================ */
+@media (max-width: 640px) {
+  #header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 6px 12px;
+  }
+  #header .title-block h1 { font-size: 1.1em; letter-spacing: 0.5px; }
+  #header .title-block p { font-size: 0.7em; }
+  #header .meta { text-align: left; font-size: 0.62em; line-height: 1.3; }
+  #reports-btn { height: 26px; padding: 0 12px; font-size: 12px; margin: 2px 8px 2px 0; }
+
+  #stats-bar {
+    gap: 5px 12px;
+    flex-wrap: wrap;
+    padding: 4px 12px;
+    font-size: 0.7em;
+  }
+  #stats-bar .stat + .stat::before { content: none; }
+
+  #search-bar { gap: 6px 6px; padding: 6px 10px; }
+  .search-wrap { flex: 1 1 100%; max-width: none; }
+  #search-bar button { flex: 0 0 auto; }
+  .header-left { gap: 10px; width: 100%; }
+  #main-menu-btn { width: 32px; height: 32px; }
+
+  /* Four full-width buttons cost about 150px before a single voter appears.
+     As chips that show only the field name until the filter actually narrows
+     something, all four sit on one line at 390px and wrap to two below that -
+     no hidden controls, and roughly 100px back. */
+  .jur-filter { flex: 0 1 auto; min-width: 0; }
+  .jur-filter-btn {
+    width: auto;
+    max-width: 100%;
+    padding: 5px 9px;
+    font-size: 0.76em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .jur-filter-btn:not(.narrowed) .jur-filter-summary { display: none; }
+  .jur-filter-panel {
+    left: 0;
+    right: auto;
+    width: 100%;
+    max-width: calc(100vw - 24px);
+    max-height: 55vh;
+  }
+
+  #legend { bottom: 14px; right: 8px; left: 8px; min-width: 0; }
+  #legend-body { max-height: 40vh; overflow-y: auto; }
+  .hover-card { max-width: calc(100vw - 24px); }
+
+  /* --- header: the nine election names become a range --- */
+  .subtitle-full { display: none; }
+  .subtitle-short { display: inline; }
+
+  /* --- stats: two counts, the rest behind the toggle --- */
+  #stats-bar { align-items: center; }
+  .stats-more { display: none; }
+  #stats-bar.open .stats-more {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    width: 100%;
+  }
+  .stats-toggle {
+    display: inline-flex;
+    align-items: center;
+    background: none;
+    border: 1px solid var(--border-stats);
+    border-radius: 999px;
+    color: var(--text-accent);
+    font: inherit;
+    padding: 2px 10px;
+    cursor: pointer;
+  }
+
+  /* ------------------------------------------------------------------
+     The voter list becomes cards.
+
+     Ten columns are 1,283px wide; a phone shows two of them. Rather than
+     ask people to scroll a table sideways, each row is laid out as a card
+     and every cell labels itself from the data-label VoterTable writes.
+     ------------------------------------------------------------------ */
+  /* "Click a row for full details" is a mouse instruction, and the card
+     layout already reads as tappable. */
+  .caption-hint { display: none; }
+  .table-caption { padding: 5px 10px; gap: 10px; font-size: 0.72em; }
+
+  .card-sort {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    padding: 5px 10px;
+    border-bottom: 1px solid var(--border-stats);
+    font-size: 0.76em;
+    color: var(--text-muted);
+  }
+  .card-sort select {
+    flex: 1;
+    min-width: 0;
+    background: var(--bg-stats);
+    color: var(--text-main);
+    border: 1px solid var(--border-stats);
+    border-radius: 6px;
+    padding: 4px 6px;
+    font: inherit;
+  }
+  .card-sort button {
+    background: var(--bg-stats);
+    color: var(--text-accent);
+    border: 1px solid var(--border-stats);
+    border-radius: 6px;
+    /* 40px keeps it inside the 44px touch target guidance without looking
+       oversized next to the select. */
+    min-width: 38px;
+    min-height: 30px;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  #account-table { display: block; font-size: 0.85em; }
+  #account-table thead { display: none; }
+  #account-table tbody { display: block; }
+
+  #account-table tbody tr {
+    display: block;
+    padding: 8px 12px 9px;
+    border-bottom: 1px solid var(--border-stats);
+  }
+  #account-table tbody tr.empty-row { text-align: center; color: var(--text-muted); }
+  #account-table tbody tr.empty-row td { display: block; }
+  #account-table tbody tr.empty-row td::before { content: none; }
+
+  #account-table tbody td {
+    display: grid;
+    grid-template-columns: 78px 1fr;
+    gap: 8px;
+    align-items: baseline;
+    padding: 1px 0;
+    border: 0;
+    text-align: left;
+    /* The table sets nowrap so columns keep their shape. In a card there are
+       no columns to keep, and nowrap is what put a horizontal scrollbar under
+       the list: "3851 NORTHWOODS CT NE # UNIT 3" is 323px on one line. */
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  #account-table tbody td::before {
+    content: attr(data-label);
+    color: var(--text-card-label);
+    font-size: 0.85em;
+  }
+  /* The name is the card's title, not two labelled fields. */
+  #account-table tbody td:nth-child(1),
+  #account-table tbody td:nth-child(2) {
+    display: inline;
+    font-size: 1.15em;
+    font-weight: 600;
+    color: var(--text-accent);
+  }
+  #account-table tbody td:nth-child(1)::before,
+  #account-table tbody td:nth-child(2)::before { content: none; }
+  #account-table tbody td:nth-child(1)::after { content: ", "; }
+  #account-table tbody td:nth-child(2)::after {
+    content: "";
+    display: block;
+    margin-bottom: 4px;
+  }
+  /* Voter ID is right-aligned in the table; in a card it is just a value. */
+  #account-table tbody td.num { text-align: left; }
+  /* Grid items stretch by default, which turns the party pill into a
+     full-width bar. Both of these size to their content instead. */
+  #account-table tbody td .party-pill,
+  #account-table tbody td .vote-badges { justify-self: start; flex-wrap: wrap; }
+
+  #pager { font-size: 0.74em; gap: 7px; }
+  #footer { flex-direction: column; align-items: flex-start; gap: 2px; }
+
+  /* --- Reports on a phone --- */
+  .reports-bar { padding: 6px 10px; gap: 6px; }
+  .reports-tab { font-size: 0.76em; padding: 4px 10px; }
+  .reports-scope { font-size: 0.72em; }
+  .reports-body { padding: 12px 10px; }
+  .report h2 { font-size: 1.02em; }
+  .report-lede { font-size: 0.76em; }
+  /* The label column has to give way first - a bar with no room to grow says
+     nothing, and the value is direct-labelled beside it either way. */
+  .viz-bar-row { grid-template-columns: minmax(74px, 40%) 1fr auto; gap: 7px; }
+  .viz-bar-label { font-size: 0.74em; }
+  .viz-bar-value { font-size: 0.74em; }
+  .viz-stat { min-width: 0; flex: 1 1 46%; padding: 10px 12px; }
+  .viz-stat-value { font-size: 1.5em; }
+  .viz-heat-corner { width: 84px; }
+  .viz-heat tbody th { font-size: 0.92em; }
+  .viz-heat thead th span { width: 46px; }
+  .viz-rank tbody th { min-width: 110px; }
+}
+
+/* ============================================================
+   Phone width only (<= 430px)
+   ============================================================ */
+@media (max-width: 430px) {
+  /* The four chips need about 400px to share one row and a phone offers 370.
+     Rather than shave padding until they just fit - which the first longer
+     label in another county's build would undo - they pair off into a 2x2
+     block. Above this width they still fit on one line. */
+  .jur-filter { flex: 1 1 calc(50% - 3px); }
+
+  #pager { flex-wrap: wrap; row-gap: 4px; padding: 5px 10px; }
+}

@@ -1,0 +1,66 @@
+# voters-core
+
+The shared code of the `<County>CountyVoters` apps (Trumbull, Mahoning,
+Ashtabula, and the rest of Ohio per `Statehouse/design/county-voters.md`).
+
+Unlike parcels-core, which is vendored into a `src/vendor/` folder, voters-core
+**is the app**: `files/` mirrors a Voters repo's root, and the sweep renders
+each file into each repo with the county's names filled in. Everything a county
+needs of its own is listed in `files/react-app/VOTERS-CORE.md` (which ships
+inside every app).
+
+## Placeholders
+
+Text files may use these, replaced exactly (so JSX `style={{ }}` and Actions
+`${{ }}` are untouched):
+
+| Token | Mahoning | Van Wert |
+|---|---|---|
+| `{{COUNTY}}` | Mahoning | Van Wert |
+| `{{COUNTY_UPPER}}` | MAHONING | VAN WERT |
+| `{{county}}` | mahoning | vanwert |
+| `{{REPO}}` | MahoningCountyVoters | VanWertCountyVoters |
+| `{{PKG}}` | mahoning-county-voters | van-wert-county-voters |
+
+`.png` files are copied as they are.
+
+**County names in comments.** Comments that record where something was
+observed ("as observed 23 Oct 2026, Mahoning", "Thirty Trumbull VTDs") keep the
+real county's name - they are provenance, true in every copy. Use a placeholder
+only where the comment is about *this* app's county.
+
+## Sweeping
+
+```powershell
+cd C:\projects\Statehouse
+python scripts\sync-shared-code.py --lib voters-core                    # report
+python scripts\sync-shared-code.py --lib voters-core --apply            # write + verify + commit plan
+python scripts\sync-shared-code.py --lib voters-core --only Ashtabula   # one repo
+```
+
+Targets: every manifest repo with `"appKind": "Voters"`. A repo opts out of
+individual files with `react-app/voters-core.json` → `exclude`, e.g.
+Trumbull's VoterView workflow.
+
+## A new county
+
+```powershell
+cd C:\projects\Statehouse
+python scripts\new-county-voters.py Columbiana
+```
+
+renders this library into `C:\projects\ColumbianaCountyVoters`, copies the a11y
+and basemaps vendor trees, writes `county.ts` from `ColumbianaCountyParcels`,
+stubs the README and CHANGES, runs `git init`, and prints what is left.
+
+## Making a change
+
+1. Edit under `voters-core/files/`. Run a Voters app's build against it with
+   `--only <County> --apply` first if the change is risky.
+2. Bump `VERSION` (patch for a fix, minor for new behaviour).
+3. Commit and push here, then sweep from Statehouse and commit each repo.
+
+`react-app/src/vendor/parcels-core/` inside `files/` is a **frozen 1.9.0
+subset** with one local change (`canvasRender.ts` takes `MapPoint[]`); the
+parcels-core sweep does not target Voters repos, and this copy only moves when
+it is edited here.
