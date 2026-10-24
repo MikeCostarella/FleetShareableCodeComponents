@@ -9,6 +9,9 @@ const GITHUB_REPO_URL =
 /** Mike Costarella's main website (hub linking to all the apps). */
 const MY_WEBSITE_URL = "https://mikecostarella.github.io/MyWebSite/";
 
+/** The OhioCounties hub: every Ohio county and the fleet apps for each. */
+const OHIO_COUNTIES_URL = "https://mikecostarella.github.io/OhioCounties/";
+
 /** Which view the app is showing. */
 export type AppView = "map" | "list" | "reports";
 
@@ -33,8 +36,8 @@ interface MainMenuProps {
 /**
  * Hamburger menu in the header. Holds a "View" section (Map / Voter List /
  * Reports), a
- * "Tools" section (Export to CSV, Reset), and a "Links" section with Help and
- * the GitHub repository. Mirrors the menu in TrumbullCountyParcels so the
+ * "Tools" section (Export to CSV, Reset), and a "Links" section with Help,
+ * MyWebSite, the Ohio Counties hub and the GitHub repository. Mirrors the menu in TrumbullCountyParcels so the
  * fleet apps behave the same way.
  *
  * Opens on click; closes on item select, a click outside, or Escape.
@@ -185,6 +188,16 @@ export default function MainMenu({
             onClick={() => setOpen(false)}
           >
             MyWebSite &#8599;
+          </a>
+          <a
+            role="menuitem"
+            className="menu-item menu-link"
+            href={OHIO_COUNTIES_URL}
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => setOpen(false)}
+          >
+            Ohio Counties &#8599;
           </a>
           <a
             role="menuitem"
