@@ -82,6 +82,11 @@ const PLATFORM_APP_TYPES = {
   "PROBLEM APP": "PA",
   "HAND CARRY": "HC",
   "ACCESSIBLE BALLOT": "AB",
+  // Written by fetch-absentee-electionvault.mjs (Butler's Election Vault
+  // distinguishes these; the platform itself folds them into UOCAVA).
+  "CIVILIAN OVERSEAS": "CO",
+  "MILITARY": "M",
+  "MILITARY OVERSEAS": "MO",
 };
 
 /** Platform party strings -> the roll's one-letter codes ("--" = none). */

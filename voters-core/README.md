@@ -42,8 +42,20 @@ site (Morrow) gets a `react-app/absentee-source.json` in its repo:
 `refresh-absentee.ps1` reads it and runs `fetch-absentee-voterview.mjs`, which
 matches each ballot to the roll by name and house number (the report's AV ID
 is not the county voter ID) and writes the same CSV layout the platform flow
-produces, so nothing downstream changes. The file is per-county and is not
-swept.
+produces, so nothing downstream changes.
+
+A Board running Election Vault (Butler) publishes two CSVs - by mail and in
+person - and gets:
+
+```json
+{ "fetcher": "electionvault", "mailUrl": "https://.../mail.csv", "inPersonUrl": "https://.../inperson.csv" }
+```
+
+`fetch-absentee-electionvault.mjs` joins them into one CSV in the state
+platform's layout (their Voter ID is the county id, so no name matching), with
+the Board's challenge codes carried through as flags.
+
+The file is per-county and is not swept.
 
 ## Sweeping
 

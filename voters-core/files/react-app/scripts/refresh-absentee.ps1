@@ -74,8 +74,10 @@ try {
   Run 'git pull' 'git pull --rebase --autostash origin main' | Out-Null
 
   # Which fetcher: the state platform unless react-app\absentee-source.json
-  # says otherwise ({ "fetcher": "voterview", "url": "https://.../details.xls" }
-  # for a Board that posts a VoterView .xls on its own site - Morrow).
+  # says otherwise: { "fetcher": "voterview", "url": "https://.../details.xls" }
+  # for a Board that posts a VoterView .xls on its own site (Morrow), or
+  # { "fetcher": "electionvault", "mailUrl": "...", "inPersonUrl": "..." } for a
+  # Board running Election Vault's two public CSVs (Butler).
   $tmp = Join-Path $env:TEMP "$Name-absentee-latest.csv"
   $fetch = Join-Path $App 'scripts\fetch-absentee-platform.mjs'
   $fetchArgs = "`"--out=$tmp`""
@@ -87,6 +89,11 @@ try {
       $fetch = Join-Path $App 'scripts\fetch-absentee-voterview.mjs'
       $fetchArgs = "`"--url=$($src.url)`" `"--out=$tmp`""
       $where = "the Board's VoterView report"
+    }
+    if ($src.fetcher -eq 'electionvault') {
+      $fetch = Join-Path $App 'scripts\fetch-absentee-electionvault.mjs'
+      $fetchArgs = "`"--mail-url=$($src.mailUrl)`" `"--inperson-url=$($src.inPersonUrl)`" `"--out=$tmp`""
+      $where = "the Board's Election Vault lists"
     }
   }
   $ok = $false
