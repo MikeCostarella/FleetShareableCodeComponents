@@ -78,7 +78,7 @@ try {
   # for a Board that posts a VoterView .xls on its own site (Morrow), or
   # { "fetcher": "electionvault", "pageUrl": "...PublicRecords.aspx", "mailName":
   # "...", "inPersonName": "..." } for a Board running Election Vault, whose two
-  # CSVs are postbacks from its Public Records page (Butler).
+  # lists are postbacks from its Public Records page (Butler, Franklin).
   $tmp = Join-Path $env:TEMP "$Name-absentee-latest.csv"
   $fetch = Join-Path $App 'scripts\fetch-absentee-platform.mjs'
   $fetchArgs = "`"--out=$tmp`""

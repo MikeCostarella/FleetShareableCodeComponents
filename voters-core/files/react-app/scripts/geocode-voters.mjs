@@ -107,10 +107,14 @@ const STREET_TYPES = {
   ROAD: "RD", STREET: "ST", AVENUE: "AVE", AV: "AVE", TR: "TRL", DRIVE: "DR", LANE: "LN",
   COURT: "CT", BOULEVARD: "BLVD", CIRCLE: "CIR", PLACE: "PL",
   TERRACE: "TER", TRAIL: "TRL", PARKWAY: "PKWY", HIGHWAY: "HWY", SQUARE: "SQ",
+  // Franklin's auditor uses two-letter types: BL(VD), WY (WAY), CR (CIR),
+  // LP (LOOP), PW (PKWY), PI (PIKE), TE (TER). Not PK: "PARK" is a street
+  // NAME far more often than a type ("438 N PARK AVE"), so it stays a word.
+  BL: "BLVD", WY: "WAY", CR: "CIR", LP: "LOOP", PW: "PKWY", PI: "PIKE", TE: "TER",
 };
 const TYPE_SUFFIXES = new Set([
   "RD", "ST", "AVE", "DR", "LN", "CT", "BLVD", "CIR", "PL", "TER", "TRL",
-  "PKWY", "HWY", "SQ", "WAY", "RUN", "PT", "LOOP", "PATH", "XING",
+  "PKWY", "HWY", "SQ", "WAY", "RUN", "PT", "LOOP", "PATH", "XING", "PIKE",
 ]);
 // Longest alternatives first so "ST RTE" isn't eaten by the "ST RT" branch.
 const ROUTE_RE =
@@ -265,7 +269,10 @@ function readChunked(data, indexPath, what) {
   }
   const dir = dirname(indexPath);
   const all = [];
-  for (const chunk of data.chunks) all.push(...readJson(join(dir, chunk), `${what} chunk ${chunk}`));
+  for (const chunk of data.chunks) {
+    // Not push(...chunk): spreading 165,000 elements overflows the call stack.
+    for (const p of readJson(join(dir, chunk), `${what} chunk ${chunk}`)) all.push(p);
+  }
   if (data.count && all.length !== data.count) {
     console.warn(`  ${what}: index promises ${data.count} but the chunks hold ${all.length}`);
   }
@@ -309,6 +316,25 @@ function parcelStreet(f) {
   return parts.join(" ");
 }
 
+/**
+ * A parcel that is a double or a small row carries a number range, "1025 -
+ * 1027 COLUMBUS ST" (Franklin, 18,645 parcels). Voters live at 1025 and at
+ * 1027, so the parcel is indexed under each number in the range - but only
+ * short ranges, stepping by two when both ends share a parity (a double);
+ * "1 - 99 MAIN ST" is a complex and would place everyone on one dot.
+ */
+function parcelAddresses(f) {
+  const s = parcelStreet(f);
+  const m = s.match(/^(\d+)\s*-\s*(\d+)\s+(.+)$/);
+  if (!m) return [s];
+  const lo = Number(m[1]), hi = Number(m[2]);
+  if (!(hi >= lo) || hi - lo > 12) return [s];
+  const step = hi !== lo && (hi - lo) % 2 === 0 ? 2 : 1;
+  const out = [];
+  for (let n = lo; n <= hi; n += step) out.push(`${n} ${m[3]}`);
+  return out;
+}
+
 /** Parcels carry no street type at all, so only the core forms are useful. */
 const pcCore = new Map();
 const pcAnywhere = new Map();
@@ -320,15 +346,17 @@ for (const p of parcels) {
   // "1344 PITTENGER RD, Weller Township" (Richland) after a comma, or
   // "291  BURNS RD  FAIRFIELD 45014" (Butler) after a double space, with the
   // ZIP last. Only the part before either is the street address.
-  const { number, rest } = splitAddress(parcelStreet(p.f));
-  if (!number) continue;
-  const point = [p.y, p.x];
-  const zip = String(p.z ?? "");
-  const core = coreName(rest);
-  const coreStr = core.join(" ");
-  push(pcCore, `${number}|${coreStr}|${zip}`, point);
-  push(pcAnywhere, `${number}|${coreStr}`, point);
-  push(pcByNumberZip, `${number}|${zip}`, [core, point]);
+  for (const addr of parcelAddresses(p.f)) {
+    const { number, rest } = splitAddress(addr);
+    if (!number) continue;
+    const point = [p.y, p.x];
+    const zip = String(p.z ?? "");
+    const core = coreName(rest);
+    const coreStr = core.join(" ");
+    push(pcCore, `${number}|${coreStr}|${zip}`, point);
+    push(pcAnywhere, `${number}|${coreStr}`, point);
+    push(pcByNumberZip, `${number}|${zip}`, [core, point]);
+  }
 }
 
 // ---------------------------------------------------------------- matching ---

@@ -120,7 +120,7 @@
  * indexes into lookup tables - and the row layout is the one loadVoters.ts
  * reads, with the geocode cells left empty for geocode-voters.mjs to fill.
  */
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync, openSync, readSync, closeSync } from "node:fs";
 import { dirname, join, resolve, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -168,32 +168,71 @@ const MONTH_NAMES = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug",
 
 const squash = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
 
-/** RFC-4180 CSV parser: quoted fields, doubled quotes, CRLF. Returns rows of strings. */
-function parseCsv(text) {
-  const rows = [];
+/**
+ * RFC-4180 CSV reader that STREAMS: the file is read in 4 MB pieces and each
+ * finished row is handed to `onRow(row, index)` and then dropped. The SoS file
+ * for Franklin is 537 MB - as one JS string plus 905,000 field arrays that is
+ * more than a 4 GB machine has, and Cuyahoga and Hamilton are the same size.
+ * Quoted fields, doubled quotes and CRLF as before; a quoted field may span a
+ * chunk boundary, since the parser state carries across reads.
+ */
+function readCsvRows(path, onRow) {
+  const fd = openSync(path, "r");
+  const buf = Buffer.alloc(4 * 1024 * 1024);
   let row = [];
   let field = "";
   let quoted = false;
-  const n = text.length;
-  for (let i = 0; i < n; i++) {
-    const c = text[i];
-    if (quoted) {
-      if (c === '"') {
-        if (text[i + 1] === '"') { field += '"'; i++; }
-        else quoted = false;
-      } else field += c;
-    } else if (c === '"') quoted = true;
-    else if (c === ",") { row.push(field); field = ""; }
-    else if (c === "\n" || c === "\r") {
-      if (c === "\r" && text[i + 1] === "\n") i++;
-      row.push(field); field = "";
-      if (row.length > 1 || row[0] !== "") rows.push(row);
-      row = [];
-    } else field += c;
+  let index = 0;
+  let pendingCR = false;
+  let pendingQuote = false; // a '"' closed a chunk; is the next char another '"'?
+  let first = true;
+  let carry = Buffer.alloc(0); // bytes of an incomplete UTF-8 sequence at a chunk's end
+  const emit = () => {
+    row.push(field); field = "";
+    if (row.length > 1 || row[0] !== "") onRow(row, index++);
+    row = [];
+  };
+  for (;;) {
+    const n = readSync(fd, buf, 0, buf.length, null);
+    if (n === 0) break;
+    const chunk = carry.length ? Buffer.concat([carry, buf.subarray(0, n)]) : buf.subarray(0, n);
+    // Don't split a multi-byte character: hold back a trailing partial sequence.
+    let end = chunk.length;
+    for (let k = 1; k <= 3 && k <= chunk.length; k++) {
+      const b = chunk[chunk.length - k];
+      if ((b & 0xC0) === 0x80) continue;
+      const need = b >= 0xF0 ? 4 : b >= 0xE0 ? 3 : b >= 0xC0 ? 2 : 1;
+      if (need > k) end = chunk.length - k;
+      break;
+    }
+    carry = Buffer.from(chunk.subarray(end));
+    let text = chunk.toString("utf8", 0, end);
+    if (first) { text = text.replace(/^\uFEFF/, ""); first = false; }
+    let i = 0;
+    if (pendingQuote) {
+      pendingQuote = false;
+      if (text[0] === '"') { field += '"'; i = 1; } else quoted = false;
+    }
+    for (; i < text.length; i++) {
+      const c = text[i];
+      if (pendingCR) { pendingCR = false; if (c === "\n") continue; }
+      if (quoted) {
+        if (c === '"') {
+          if (i + 1 === text.length) { pendingQuote = true; }
+          else if (text[i + 1] === '"') { field += '"'; i++; }
+          else quoted = false;
+        } else field += c;
+      } else if (c === '"') quoted = true;
+      else if (c === ",") { row.push(field); field = ""; }
+      else if (c === "\n") emit();
+      else if (c === "\r") { emit(); pendingCR = true; }
+      else field += c;
+    }
   }
-  row.push(field);
-  if (row.length > 1 || row[0] !== "") rows.push(row);
-  return rows;
+  closeSync(fd);
+  if (pendingQuote) quoted = false;
+  if (field !== "" || row.length) emit();
+  return index;
 }
 
 // ------------------------------------------------------------- the source ---
@@ -230,8 +269,24 @@ if (args.file) {
 const COUNTY_LABEL = args.county ?? `${source.county} County, Ohio`;
 
 console.log(`Reading ${source.file} (${COUNTY_LABEL}, downloaded ${source.date})`);
-const rows = parseCsv(readFileSync(source.path, "utf8").replace(/^﻿/, ""));
-const header = rows[0].map(squash);
+// Pass 1: the header only. Pass 2 (below, once the column indexes and the
+// crosswalk are ready) streams the voter rows.
+let header = null;
+{
+  const fd = openSync(source.path, "r");
+  const buf = Buffer.alloc(256 * 1024);
+  const n = readSync(fd, buf, 0, buf.length, 0);
+  closeSync(fd);
+  const firstLine = buf.toString("utf8", 0, n).replace(/^\uFEFF/, "").split(/\r?\n/)[0];
+  const cells = []; let f = ""; let q = false;
+  for (let i = 0; i < firstLine.length; i++) {
+    const c = firstLine[i];
+    if (q) { if (c === '"') { if (firstLine[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
+    else if (c === '"') q = true; else if (c === ",") { cells.push(f); f = ""; } else f += c;
+  }
+  cells.push(f);
+  header = cells.map(squash);
+}
 const col = (name) => {
   const i = header.indexOf(name);
   if (i === -1) throw new Error(`Column "${name}" not found in ${source.file}; is this an SoS voter file?`);
@@ -276,7 +331,7 @@ header.forEach((h, i) => {
 allElectionCols.sort((a, b) => a.date.localeCompare(b.date));
 const windowCols = allElectionCols.filter((e) => e.year >= SINCE);
 console.log(
-  `  ${(rows.length - 1).toLocaleString()} voters; ${allElectionCols.length} election columns ` +
+  `  ${allElectionCols.length} election columns ` +
     `(${allElectionCols[0]?.date} .. ${allElectionCols[allElectionCols.length - 1]?.date}), ` +
     `${windowCols.length} from ${SINCE} on`,
 );
@@ -412,11 +467,11 @@ const partyCounts = new Map();
 let duplicates = 0;
 let badRows = 0;
 
-for (let r = 1; r < rows.length; r++) {
-  const row = rows[r];
-  if (row.length !== header.length) { badRows++; continue; }
+const rowCount = readCsvRows(source.path, (row, r) => {
+  if (r === 0) return; // the header
+  if (row.length !== header.length) { badRows++; return; }
   const id = Number(squash(row[C.id]));
-  if (!Number.isInteger(id)) { badRows++; continue; }
+  if (!Number.isInteger(id)) { badRows++; return; }
 
   const addr2 = squash(row[C.addr2]);
   const street = squash(row[C.addr1]) + (addr2 ? ` # ${addr2}` : "");
@@ -448,8 +503,8 @@ for (let r = 1; r < rows.length; r++) {
   };
   if (voters.has(id)) duplicates++;
   voters.set(id, { attrs, votes });
-}
-console.log(`  ${voters.size.toLocaleString()} distinct voters (${badRows} malformed rows, ${duplicates} duplicate IDs)`);
+}) - 1;
+console.log(`  ${rowCount.toLocaleString()} rows; ${voters.size.toLocaleString()} distinct voters (${badRows} malformed rows, ${duplicates} duplicate IDs)`);
 
 // ------------------------------------------------------------- elections ---
 

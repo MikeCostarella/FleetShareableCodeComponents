@@ -28,20 +28,27 @@
  * form once per list. Validated against the saved page; a change to the page
  * shows up as "no link with the text ..." or a non-CSV response, both fatal.
  *
- * THE FILES
- * Real CSVs with a header row, Latin-1 encoded: Voter ID, First Name, Last
- * Name, Address, City, State, Zip, Precinct ("FAIR2WD3.0"), a dozen district
+ * THE FILES - two layouts so far, told apart by the header row:
+ *
+ * Butler (comma-separated .csv, Latin-1): Voter ID, First Name, Last Name,
+ * Address, City, State, Zip, Precinct ("FAIR2WD3.0"), a dozen district
  * columns, Party (UNAFFILIATED / REPUBLICAN / ...), Requested Date, Ballot
  * Issued (in-person) or Ballot Mailed (mail), Ballot Returned, Type (mail
- * only: ABSENTEE BALLOT, NURSING HOME, FPCA CIVILIAN OVERSEAS, FPCA MILITARY
- * OVERSEAS, FPCA IN COUNTRY) and Challenge Code (mail only: VAL, IDNOMATCH,
- * SIGNOMATCH, NOSIG, NHR...). Columns are found by header text.
+ * only: ABSENTEE BALLOT, NURSING HOME, FPCA CIVILIAN OVERSEAS...) and
+ * Challenge Code (mail only: VAL, IDNOMATCH, SIGNOMATCH, NOSIG, NHR...).
  *
- * Unlike Morrow's VoterView report, "Voter ID" IS the county voter ID the SoS
- * roll uses (24,570 of 24,581 in-person voters matched the roll by id with the
- * name agreeing on every one), so ballots join to the roll directly. An
+ * Franklin (tab-separated .txt): PRECINCT_NAME, ... PARTY (one letter: D R L
+ * U), DATE VOTED (in-person) or DATE MAILED + DATE RETURNED + DATE_REQUESTED
+ * + VAL/REJECTED (mail: VAL, blank = still out, NOSIG, IDNOMATCH, NOID,
+ * REFUSED, NAMECHG, SPRET), LOCAL_ID, FIRST NAME, MIDDLE NAME, LAST NAME,
+ * SUFFIX NAME, ADDRESS LINE 1-4, CITY, STATE, ZIP, MAILED (M, or I for the
+ * few issued in office).
+ *
+ * In both, the Board's voter id IS the county id the SoS roll uses (Butler:
+ * 24,570 of 24,581 in-person voters matched by id with the name agreeing;
+ * Franklin: 54,679 of 54,708), so ballots join to the roll directly. An
  * in-person ballot is issued and returned the same day; a mail ballot with no
- * Ballot Returned date is still out.
+ * returned date is still out.
  */
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -163,20 +170,31 @@ function parseCsv(text) {
 const squash = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
 const csv = (f) => (/[",\r\n]/.test(f) ? `"${f.replace(/"/g, '""')}"` : f);
 
-/** Rows of one file as objects keyed by header, with the headers checked. */
-function table(text, what, required) {
-  const rows = parseCsv(text.replace(/^﻿/, ""));
+/** Rows of one file as objects keyed by upper-cased header; comma or tab separated. */
+function table(text, what) {
+  text = text.replace(/^\uFEFF/, "");
+  const tabbed = text.split(/\r?\n/, 1)[0].includes("\t");
+  const rows = tabbed
+    ? text.split(/\r?\n/).filter((l) => l.trim() !== "").map((l) => l.split("\t"))
+    : parseCsv(text);
   if (rows.length < 2) throw new Error(`${what}: no data rows`);
   const header = rows[0].map((h) => squash(h).toUpperCase());
-  for (const h of required) {
-    if (!header.includes(h.toUpperCase())) throw new Error(`${what}: no '${h}' column in: ${header.join(" | ")}`);
-  }
-  return rows.slice(1).map((r) => Object.fromEntries(header.map((h, i) => [h, squash(r[i])])));
+  return { header, rows: rows.slice(1).map((r) => Object.fromEntries(header.map((h, i) => [h, squash(r[i])]))) };
+}
+
+/** Which Board's layout a file is, from its header. */
+function layoutOf(header, what) {
+  if (header.includes("VOTER ID") && header.includes("BALLOT RETURNED")) return "butler";
+  if (header.includes("LOCAL_ID") && (header.includes("DATE VOTED") || header.includes("DATE RETURNED"))) return "franklin";
+  throw new Error(`${what}: unrecognised columns: ${header.join(" | ")}`);
 }
 
 // ------------------------------------------------------------- mapping ---
 
-const PARTY = { UNAFFILIATED: "", NON: "", REPUBLICAN: "REP", DEMOCRATIC: "DEM", LIBERTARIAN: "LIB", GREEN: "GRE" };
+const PARTY = {
+  UNAFFILIATED: "", NON: "", REPUBLICAN: "REP", DEMOCRATIC: "DEM", LIBERTARIAN: "LIB", GREEN: "GRE",
+  U: "", N: "", D: "DEM", R: "REP", L: "LIB", G: "GRE",
+};
 /** Election Vault mail "Type" -> the platform's AVAPPTYPE text (lib/absentee.mjs maps those to codes). */
 const MAIL_TYPE = {
   "ABSENTEE BALLOT": "MAIL",
@@ -189,13 +207,15 @@ const MAIL_TYPE = {
 const CHALLENGE = {
   "": "", VAL: "VALID",
   IDNOMATCH: "ID DOES NOT MATCH", SIGNOMATCH: "SIGNATURE DOES NOT MATCH", NOSIG: "NO VOTER SIGNATURE",
-  NHR: "NHR (BOARD CODE)",
+  NHR: "NHR (BOARD CODE)", NOID: "NO ID", REFUSED: "REFUSED TO VOTE", NAMECHG: "NAME CHANGE", SPRET: "SPOILED - RETURNED",
 };
+/** "10/6/2026 12:00:00 AM" or "10/06/2026" -> the date part. */
+const dateOnly = (s) => (String(s ?? "").match(/^\d{1,2}\/\d{1,2}\/\d{4}/) ?? [""])[0];
 
 const HEADER = ["LASTN", "FIRSTN", "MIDDLEN", "SUFFIXN", "PARTYAFFIL", "CNTYIDNUM", "AVADDR1", "AVADDR2", "CITY", "STATE",
   "ZIPCODE", "COUNTRY", "AVSENTDATE", "AVRECVDATE", "AVRECVMETH", "AVAPPTYPE", "PRECNAME", "AVAPPDATE", "AVBALSTAT", "SOURCE"];
 
-function platformRow(r, { sent, appType, recvMeth, status }) {
+function butlerRow(r, { sent, appType, recvMeth, status }) {
   const returned = r["BALLOT RETURNED"] ?? "";
   return [
     r["LAST NAME"], r["FIRST NAME"], "", "",
@@ -213,6 +233,24 @@ function platformRow(r, { sent, appType, recvMeth, status }) {
 
 // ------------------------------------------------------------- run ---
 
+function franklinRow(r, { sent, returned, appType, recvMeth, status, requested }) {
+  return [
+    r["LAST NAME"], r["FIRST NAME"], r["MIDDLE NAME"] ?? "", r["SUFFIX NAME"] ?? "",
+    PARTY[(r["PARTY"] ?? "").toUpperCase()] ?? r["PARTY"],
+    String(Number(r["LOCAL_ID"])),
+    r["ADDRESS LINE 1"], [r["ADDRESS LINE 2"], r["ADDRESS LINE 3"], r["ADDRESS LINE 4"]].filter(Boolean).join(" "),
+    r["CITY"], r["STATE"], (r["ZIP"] ?? "").slice(0, 5), "",
+    sent, returned,
+    returned ? recvMeth : "NOT RECEIVED",
+    appType,
+    r["PRECINCT_NAME"] ?? "",
+    requested,
+    returned ? status : "",
+  ];
+}
+
+// ------------------------------------------------------------- run ---
+
 let page = null, fields = null;
 if (!local) {
   page = await loadPage(args.page);
@@ -223,29 +261,55 @@ if (!local) {
 // server accepts (each download is a fresh postback against the same view).
 const mailText = await load("by-mail list", args["mail-in"], MAIL_NAME, page, fields);
 const inPersonText = await load("in-person list", args["inperson-in"], INPERSON_NAME, page, fields);
-const mail = table(mailText, "by-mail list", ["Voter ID", "Last Name", "Ballot Mailed", "Ballot Returned", "Type", "Challenge Code"]);
-const inPerson = table(inPersonText, "in-person list", ["Voter ID", "Last Name", "Ballot Issued", "Ballot Returned"]);
+const mailT = table(mailText, "by-mail list");
+const inPersonT = table(inPersonText, "in-person list");
+const layout = layoutOf(mailT.header, "by-mail list");
+if (layoutOf(inPersonT.header, "in-person list") !== layout) throw new Error("the two lists are in different layouts");
+const mail = mailT.rows, inPerson = inPersonT.rows;
+console.log(`  ${layout} layout`);
 
 const out = [HEADER.join(",")];
 let returned = 0;
 const seen = new Set();
 let both = 0;
-for (const r of inPerson) {
-  const row = platformRow(r, { sent: r["BALLOT ISSUED"], appType: "IN OFFICE", recvMeth: "IN OFFICE", status: "VALID" });
-  if (row[13]) returned++;
-  seen.add(row[5]);
-  out.push([...row, "in-person"].map(csv).join(","));
-}
-for (const r of mail) {
-  const type = (r["TYPE"] ?? "").toUpperCase();
-  const code = (r["CHALLENGE CODE"] ?? "").toUpperCase();
-  const row = platformRow(r, {
-    sent: r["BALLOT MAILED"], appType: MAIL_TYPE[type] ?? type, recvMeth: "MAIL",
-    status: CHALLENGE[code] ?? code,
-  });
-  if (row[13]) returned++;
-  if (seen.has(row[5])) both++;
-  out.push([...row, "mail"].map(csv).join(","));
+if (layout === "butler") {
+  for (const r of inPerson) {
+    const row = butlerRow(r, { sent: r["BALLOT ISSUED"], appType: "IN OFFICE", recvMeth: "IN OFFICE", status: "VALID" });
+    if (row[13]) returned++;
+    seen.add(row[5]);
+    out.push([...row, "in-person"].map(csv).join(","));
+  }
+  for (const r of mail) {
+    const type = (r["TYPE"] ?? "").toUpperCase();
+    const code = (r["CHALLENGE CODE"] ?? "").toUpperCase();
+    const row = butlerRow(r, {
+      sent: r["BALLOT MAILED"], appType: MAIL_TYPE[type] ?? type, recvMeth: "MAIL",
+      status: CHALLENGE[code] ?? code,
+    });
+    if (row[13]) returned++;
+    if (seen.has(row[5])) both++;
+    out.push([...row, "mail"].map(csv).join(","));
+  }
+} else {
+  for (const r of inPerson) {
+    const d = dateOnly(r["DATE VOTED"]);
+    const row = franklinRow(r, { sent: d, returned: d, appType: "IN OFFICE", recvMeth: "IN OFFICE", status: "VALID", requested: d });
+    if (row[13]) returned++;
+    seen.add(row[5]);
+    out.push([...row, "in-person"].map(csv).join(","));
+  }
+  for (const r of mail) {
+    const code = (r["VAL/REJECTED"] ?? "").toUpperCase();
+    const inOffice = (r["MAILED"] ?? "").toUpperCase() === "I";
+    const row = franklinRow(r, {
+      sent: dateOnly(r["DATE MAILED"]), returned: dateOnly(r["DATE RETURNED"]),
+      appType: inOffice ? "IN OFFICE" : "MAIL", recvMeth: inOffice ? "IN OFFICE" : "MAIL",
+      status: CHALLENGE[code] ?? code, requested: dateOnly(r["DATE_REQUESTED"] ?? ""),
+    });
+    if (row[13]) returned++;
+    if (seen.has(row[5])) both++;
+    out.push([...row, "mail"].map(csv).join(","));
+  }
 }
 
 mkdirSync(dirname(OUT), { recursive: true });
