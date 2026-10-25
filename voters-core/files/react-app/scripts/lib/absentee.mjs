@@ -280,12 +280,19 @@ function readPlatform(rows) {
   return { format: "platform", rowCount, skipped, reissued, ballots };
 }
 
-/** Newest issued or returned date across the ballots - the file's honest version stamp. */
+/**
+ * Newest issued or returned date across the ballots - the file's honest version
+ * stamp. Dates after today are ignored: Summit's Oct 2026 file carried 32 ballots
+ * "sent" on 10/26/2029 (a Board typo), which would otherwise have been the stamp
+ * for three years - and made every corrected file look older than the one on file.
+ */
 export function latestDate(ballots) {
+  const today = new Date().toISOString().slice(0, 10);
   let asOf = "";
   for (const b of ballots.values()) {
-    if (b.issued > asOf) asOf = b.issued;
-    if (b.returned > asOf) asOf = b.returned;
+    for (const d of [b.issued, b.returned]) {
+      if (d && d <= today && d > asOf) asOf = d;
+    }
   }
   return asOf;
 }

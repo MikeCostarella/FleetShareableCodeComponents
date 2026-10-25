@@ -21,6 +21,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { PRECACHE_LIMIT } from "./online-only.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const APP = resolve(HERE, "..");
@@ -36,16 +37,26 @@ try {
   process.exit(1);
 }
 
+
 const missing = [];
 for (const file of readdirSync(DATA_DIR)) {
   const url = `data/${file}`;
+  const bytes = statSync(join(DATA_DIR, file)).size;
+  if (bytes > PRECACHE_LIMIT) {
+    // Left out on purpose: online-only, cached on first load (scripts/online-only.mjs).
+    const ok = !sw.includes(`"${url}"`) && sw.includes("voters-data");
+    console.log(`  check-precache: ${url} (${(bytes / 1024 / 1024).toFixed(1)} MB) is over the precache limit - ` +
+      (ok ? "online-only, cached on first load." : "BUT THE RUNTIME CACHE RULE IS MISSING."));
+    if (!ok) missing.push({ url, mb: bytes / 1024 / 1024 });
+    continue;
+  }
   if (!sw.includes(`"${url}"`)) {
     missing.push({ url, mb: statSync(join(DATA_DIR, file)).size / 1024 / 1024 });
   }
 }
 
 if (missing.length === 0) {
-  console.log("  check-precache: every data file is in the precache manifest.");
+  console.log("  check-precache: every data file is precached or deliberately online-only.");
   process.exit(0);
 }
 

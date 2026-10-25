@@ -1,9 +1,17 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
+import { PRECACHE_LIMIT, onlineOnlyFiles } from "./scripts/online-only.mjs";
 
 // GitHub Pages project site: base MUST equal "/<RepoName>/".
 const BASE = "/{{REPO}}/";
+
+/**
+ * Data files over the precache limit (a big county's voters.json): left out of
+ * the install-time precache and cached on first load instead. See
+ * scripts/online-only.mjs.
+ */
+const ONLINE_ONLY = onlineOnlyFiles();
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -43,7 +51,18 @@ export default defineConfig({
         // geojson is listed explicitly: a data file whose extension is missing
         // here is skipped silently, with no warning and no build failure.
         globPatterns: ["**/*.{js,css,html,png,svg,json,geojson}"],
+        globIgnores: ONLINE_ONLY.map((f) => `**/data/${f}`),
         runtimeCaching: [
+          {
+            // Online-only data files (see ONLINE_ONLY above): cached on first load.
+            urlPattern: ({ url }) => ONLINE_ONLY.some((f) => url.pathname.endsWith(`/data/${f}`)),
+            handler: "NetworkFirst",
+            options: {
+              cacheName: "voters-data",
+              expiration: { maxEntries: 8 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
           {
             // Ohio OSIP aerial tiles (vendor/basemaps), cached so the aerial
             // keeps working offline once an area has been viewed.
@@ -74,11 +93,11 @@ export default defineConfig({
          * so it
          * has to stay ahead of the file on disk.
          *
-         * Exceeding it fails the build outright ("error during build", exit 1),
-         * which is the good outcome: raise the number and rebuild. The quieter
-         * hazard is globPatterns, not this - see scripts/check-precache.mjs.
+         * A data file over it is now left out on purpose (ONLINE_ONLY above)
+         * rather than failing the build. The quieter hazard is globPatterns,
+         * not this - see scripts/check-precache.mjs.
          */
-        maximumFileSizeToCacheInBytes: 24 * 1024 * 1024,
+        maximumFileSizeToCacheInBytes: PRECACHE_LIMIT,
       },
     }),
   ],
