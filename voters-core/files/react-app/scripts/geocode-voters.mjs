@@ -128,6 +128,18 @@ function tokenize(street) {
   s = s.replace(/\([^)]*\)/g, " ");
   s = s.replace(/#.*$/, "").replace(UNIT_RE, "");
   s = s.replace(ROUTE_RE, "SR");
+  // A US route is "US RT 42" on the roll and "RT 42 ST" on Morrow's parcels;
+  // Ohio never gives a state route a US route's number, so both are "SR 42".
+  s = s.replace(/\bUS\s+(?:HWY\s+)?(?:SR\s+)?(?=\d)/g, "SR ");
+  // County and township roads: "CO RD 170" on the roll, "CO 170 RD" from
+  // Morrow's auditor, "CR 170" / "TR 134" elsewhere - all "CO RD 170" / "TWP RD 134".
+  s = s
+    .replace(/\b(?:CO|CR|CTY|COUNTY)\s+(?:RD|ROAD)\s+(\d+)\b/g, "CO RD $1")
+    .replace(/\b(?:CO|CTY|COUNTY)\s+(\d+)\s+(?:RD|ROAD)\b/g, "CO RD $1")
+    .replace(/\bCR\s+(\d+)\b/g, "CO RD $1")
+    .replace(/\b(?:TWP|TR|TOWNSHIP)\s+(?:RD|ROAD)\s+(\d+)\b/g, "TWP RD $1")
+    .replace(/\b(?:TWP|TOWNSHIP)\s+(\d+)\s+(?:RD|ROAD)\b/g, "TWP RD $1")
+    .replace(/\b(?:TR|TWP)\s+(\d+)\b/g, "TWP RD $1");
   s = s.replace(/[^A-Z0-9 ]/g, " ");
   return s
     .split(/\s+/)
@@ -156,6 +168,17 @@ function coreName(rest) {
   if (r.length && TYPE_SUFFIXES.has(r[r.length - 1])) r.pop();
   while (r.length && DIRECTIONALS.has(r[r.length - 1])) r.pop();
   return r;
+}
+
+/**
+ * The core name with its leading directional removed too, or null when there
+ * is none. Many auditors leave the directional off ("947 LUNDY AVE" for the
+ * roll's "947 S LUNDY AV"; Morrow writes "HIGH ST W" for "W HIGH ST"), so a
+ * voter whose core finds nothing tries this form - which only reaches parcels
+ * that carry NO directional, never "947 N LUNDY", whose core keeps its N.
+ */
+function coreWithoutLead(core) {
+  return core.length > 1 && DIRECTIONALS.has(core[0]) ? core.slice(1) : null;
 }
 
 /** True when every candidate sits within TIGHT_DEG of the others. */
@@ -300,6 +323,8 @@ for (const v of data.voters) {
   const quad = withoutQuadrant(rest).join(" ");
   const core = coreName(rest);
   const coreStr = core.join(" ");
+  const noLead = coreWithoutLead(core);
+  const noLeadStr = noLead ? noLead.join(" ") : null;
 
   let point = null;
   let tier = GEO.NONE;
@@ -315,6 +340,7 @@ for (const v of data.voters) {
     [apExact, full, GEO.EXACT],
     [apQuadrant, quad, GEO.QUADRANT],
     [apCore, coreStr, GEO.NO_TYPE],
+    ...(noLeadStr ? [[apCore, noLeadStr, GEO.NO_TYPE]] : []),
   ]) {
     for (const geo of [city, zip]) {
       const pts = map.get(`${number}|${form}|${geo}`);
@@ -333,7 +359,9 @@ for (const v of data.voters) {
   // 5: not an address point at all - fall back to the parcel roll.
   if (!point) {
     const p = lookup(pcCore, `${number}|${coreStr}|${zip}`) ??
-              lookup(pcAnywhere, `${number}|${coreStr}`);
+              lookup(pcAnywhere, `${number}|${coreStr}`) ??
+              (noLeadStr && (lookup(pcCore, `${number}|${noLeadStr}|${zip}`) ??
+                             lookup(pcAnywhere, `${number}|${noLeadStr}`)));
     if (p) { point = p; tier = GEO.PARCEL; }
   }
   // 6: one name is a prefix of the other, same house number and ZIP.
