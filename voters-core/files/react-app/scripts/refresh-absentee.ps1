@@ -78,7 +78,9 @@ try {
   # for a Board that posts a VoterView .xls on its own site (Morrow), or
   # { "fetcher": "electionvault", "pageUrl": "...PublicRecords.aspx", "mailName":
   # "...", "inPersonName": "..." } for a Board running Election Vault, whose two
-  # lists are postbacks from its Public Records page (Butler, Franklin).
+  # lists are postbacks from its Public Records page (Butler, Franklin); or
+  # { "fetcher": "hamilton", "siteUrl": "https://votehamiltoncountyohio.gov" }
+  # for the Hamilton Board's export API.
   $tmp = Join-Path $env:TEMP "$Name-absentee-latest.csv"
   $fetch = Join-Path $App 'scripts\fetch-absentee-platform.mjs'
   $fetchArgs = "`"--out=$tmp`""
@@ -90,6 +92,11 @@ try {
       $fetch = Join-Path $App 'scripts\fetch-absentee-voterview.mjs'
       $fetchArgs = "`"--url=$($src.url)`" `"--out=$tmp`""
       $where = "the Board's VoterView report"
+    }
+    if ($src.fetcher -eq 'hamilton') {
+      $fetch = Join-Path $App 'scripts\fetch-absentee-hamilton.mjs'
+      $fetchArgs = "`"--site=$($src.siteUrl)`" `"--out=$tmp`""
+      $where = "the Board's export API"
     }
     if ($src.fetcher -eq 'electionvault') {
       $fetch = Join-Path $App 'scripts\fetch-absentee-electionvault.mjs'

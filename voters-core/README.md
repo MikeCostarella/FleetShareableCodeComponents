@@ -60,6 +60,11 @@ layouts so far, told apart by the header; their voter id is the county id, so
 no name matching), with the Board's
 challenge codes carried through as flags.
 
+Hamilton's Board generates a CSV on request through a small API and gets
+`{ "fetcher": "hamilton", "siteUrl": "https://votehamiltoncountyohio.gov" }`
+for `fetch-absentee-hamilton.mjs` (ask for the current election, request the
+export, download the file it names).
+
 The file is per-county and is not swept.
 
 ## Sweeping
