@@ -54,6 +54,10 @@ concurrency:
 env:
   # "MahoningCountyVoters" -> sibling prefix "MahoningCounty"
   REPO_NAME: ${{ github.event.repository.name }}
+  # Node's default heap (~2 GB) is not enough for the merge and geocode of a
+  # big county - Franklin holds 905,000 voters and 493,000 parcels in memory
+  # at once. The runner has 7 GB; let Node use most of it.
+  NODE_OPTIONS: --max-old-space-size=5120
 
 jobs:
   merge:

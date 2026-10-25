@@ -72,7 +72,9 @@ const VOTERS = join(ROOT, "react-app", "public", "data", "voters.json");
  * wrote from the roll's own CITY / TOWNSHIP / VILLAGE columns instead of a
  * point-in-polygon result. Only the parcels repo is required.
  */
+console.log(`Reading voters.json ...`);
 const data = readJson(VOTERS, "voters");
+console.log(`  ${data.voters.length.toLocaleString()} voters`);
 const COUNTY = (String(data.county ?? "").match(/^(.+?) County/) ?? [, "Trumbull"])[1].replace(/\s+/g, "");
 const sibling = (suffix, file) => join(FLEET, `${COUNTY}County${suffix}`, "react-app", "public", "data", file);
 const ADDRESS_POINTS = sibling("AddressPoints", "address-points.json");
@@ -254,7 +256,9 @@ function readOptionalJson(path, what) {
 // ---------------------------------------------------------------- indexes ---
 
 const addressPoints = readOptionalJson(ADDRESS_POINTS, "address points") ?? [];
+console.log(`Reading parcels ...`);
 const parcels = readChunked(readJson(PARCELS, "parcels"), PARCELS, "parcels");
+console.log(`  ${parcels.length.toLocaleString()} parcels${addressPoints.length ? `, ${addressPoints.length.toLocaleString()} address points` : ""}; indexing ...`);
 
 /**
  * A big county's Parcels app splits its roll into chunks and leaves an index
@@ -371,7 +375,11 @@ function lookup(map, key) {
 
 const tally = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
 
+console.log(`Placing ${data.voters.length.toLocaleString()} voters ...`);
+let done = 0;
+const PROGRESS_EVERY = 100_000;
 for (const v of data.voters) {
+  if (++done % PROGRESS_EVERY === 0) console.log(`  ... ${done.toLocaleString()}`);
   const street = v[4];
   const city = String(cities[v[5]] ?? "").toUpperCase().trim();
   const zip = String(zips[v[6]] ?? "");

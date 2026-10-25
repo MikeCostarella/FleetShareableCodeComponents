@@ -8,10 +8,10 @@
     "build": "tsc -b && vite build && node scripts/check-precache.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "convert": "node scripts/convert-voters.mjs && node scripts/convert-absentee.mjs && node scripts/geocode-voters.mjs",
-    "absentee": "node scripts/convert-absentee.mjs && node scripts/geocode-voters.mjs",
-    "geocode": "node scripts/geocode-voters.mjs",
-    "convert:sos": "node scripts/convert-sos.mjs && node scripts/convert-absentee.mjs && node scripts/geocode-voters.mjs"
+    "convert": "node --max-old-space-size=4096 scripts/convert-voters.mjs && node --max-old-space-size=4096 scripts/convert-absentee.mjs && node --max-old-space-size=4096 scripts/geocode-voters.mjs",
+    "absentee": "node --max-old-space-size=4096 scripts/convert-absentee.mjs && node --max-old-space-size=4096 scripts/geocode-voters.mjs",
+    "geocode": "node --max-old-space-size=4096 scripts/geocode-voters.mjs",
+    "convert:sos": "node --max-old-space-size=4096 scripts/convert-sos.mjs && node --max-old-space-size=4096 scripts/convert-absentee.mjs && node --max-old-space-size=4096 scripts/geocode-voters.mjs"
   },
   "dependencies": {
     "leaflet": "^1.9.4",

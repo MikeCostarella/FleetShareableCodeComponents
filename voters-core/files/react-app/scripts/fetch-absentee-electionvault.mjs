@@ -127,7 +127,20 @@ async function postback(page, fields, control, what) {
   if (!res.ok) throw new Error(`${res.status} ${res.statusText} posting for ${what}`);
   const disposition = res.headers.get("content-disposition") ?? "";
   const type = res.headers.get("content-type") ?? "";
-  const text = Buffer.from(await res.arrayBuffer()).toString("latin1");
+  // Read the body in pieces and say how far along it is: a big county's list
+  // is tens of MB, and a silent minute looks like a hang in the task log.
+  const expected = Number(res.headers.get("content-length") ?? 0);
+  const chunks = [];
+  let got = 0, lastSaid = Date.now();
+  for await (const chunk of res.body) {
+    chunks.push(chunk);
+    got += chunk.length;
+    if (Date.now() - lastSaid > 5000) {
+      console.log(`  ... ${(got / 1048576).toFixed(1)} MB${expected ? ` of ${(expected / 1048576).toFixed(1)}` : ""}`);
+      lastSaid = Date.now();
+    }
+  }
+  const text = Buffer.concat(chunks).toString("latin1");
   if (/text\/html/i.test(type) && !/attachment/i.test(disposition)) {
     throw new Error(`${what}: the server answered with a web page, not a file (${text.length} chars) - the postback was not accepted`);
   }
@@ -262,7 +275,9 @@ if (!local) {
 const mailText = await load("by-mail list", args["mail-in"], MAIL_NAME, page, fields);
 const inPersonText = await load("in-person list", args["inperson-in"], INPERSON_NAME, page, fields);
 const mailT = table(mailText, "by-mail list");
+console.log(`  by-mail list: ${mailT.rows.length.toLocaleString()} rows`);
 const inPersonT = table(inPersonText, "in-person list");
+console.log(`  in-person list: ${inPersonT.rows.length.toLocaleString()} rows`);
 const layout = layoutOf(mailT.header, "by-mail list");
 if (layoutOf(inPersonT.header, "in-person list") !== layout) throw new Error("the two lists are in different layouts");
 const mail = mailT.rows, inPerson = inPersonT.rows;

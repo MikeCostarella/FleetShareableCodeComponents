@@ -164,7 +164,9 @@ const files = readdirSync(SOURCE_DIR).filter((f) => /absentee.*\.csv$/i.test(f))
 if (!existsSync(OUT)) {
   throw new Error(`${OUT} does not exist - run convert-voters.mjs first.`);
 }
+console.log(`Reading voters.json ...`);
 const data = JSON.parse(readFileSync(OUT, "utf8"));
+console.log(`  ${data.voters.length.toLocaleString()} voters on file`);
 const COUNTY = (String(data.county ?? "").match(/^(.+?) County/) ?? [, "the"])[1];
 const FIELDS = data.fields;
 const BALLOT_COL = 14;
