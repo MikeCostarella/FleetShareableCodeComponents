@@ -265,7 +265,10 @@ const pcByNumberZip = new Map();
 
 for (const p of parcels) {
   if (!p.y || !p.x) continue; // ~half the parcels have no geometry baked in
-  const { number, rest } = splitAddress(p.f);
+  // Some counties' parcel layers append the place to the site address
+  // ("1344 PITTENGER RD, Weller Township" - Richland, Oct 2026). Only the part
+  // before the first comma is the street address.
+  const { number, rest } = splitAddress(String(p.f ?? "").split(",")[0]);
   if (!number) continue;
   const point = [p.y, p.x];
   const zip = String(p.z ?? "");
