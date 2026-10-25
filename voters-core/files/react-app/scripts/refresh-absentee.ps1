@@ -76,8 +76,9 @@ try {
   # Which fetcher: the state platform unless react-app\absentee-source.json
   # says otherwise: { "fetcher": "voterview", "url": "https://.../details.xls" }
   # for a Board that posts a VoterView .xls on its own site (Morrow), or
-  # { "fetcher": "electionvault", "mailUrl": "...", "inPersonUrl": "..." } for a
-  # Board running Election Vault's two public CSVs (Butler).
+  # { "fetcher": "electionvault", "pageUrl": "...PublicRecords.aspx", "mailName":
+  # "...", "inPersonName": "..." } for a Board running Election Vault, whose two
+  # CSVs are postbacks from its Public Records page (Butler).
   $tmp = Join-Path $env:TEMP "$Name-absentee-latest.csv"
   $fetch = Join-Path $App 'scripts\fetch-absentee-platform.mjs'
   $fetchArgs = "`"--out=$tmp`""
@@ -92,7 +93,7 @@ try {
     }
     if ($src.fetcher -eq 'electionvault') {
       $fetch = Join-Path $App 'scripts\fetch-absentee-electionvault.mjs'
-      $fetchArgs = "`"--mail-url=$($src.mailUrl)`" `"--inperson-url=$($src.inPersonUrl)`" `"--out=$tmp`""
+      $fetchArgs = "`"--page=$($src.pageUrl)`" `"--mail-name=$($src.mailName)`" `"--inperson-name=$($src.inPersonName)`" `"--out=$tmp`""
       $where = "the Board's Election Vault lists"
     }
   }

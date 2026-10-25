@@ -48,12 +48,16 @@ A Board running Election Vault (Butler) publishes two CSVs - by mail and in
 person - and gets:
 
 ```json
-{ "fetcher": "electionvault", "mailUrl": "https://.../mail.csv", "inPersonUrl": "https://.../inperson.csv" }
+{ "fetcher": "electionvault", "pageUrl": "https://.../ElectionVault/PublicRecords.aspx",
+  "mailName": "Absentee by Mail Voter List (Current Election).csv",
+  "inPersonName": "Absentee In-Person Voter List (Current Election).csv" }
 ```
 
-`fetch-absentee-electionvault.mjs` joins them into one CSV in the state
-platform's layout (their Voter ID is the county id, so no name matching), with
-the Board's challenge codes carried through as flags.
+`fetch-absentee-electionvault.mjs` loads the page, finds each list's download
+link by its text and replays the ASP.NET postback the link makes (there is no
+URL per file), then joins the two CSVs into one in the state platform's layout
+(their Voter ID is the county id, so no name matching), with the Board's
+challenge codes carried through as flags.
 
 The file is per-county and is not swept.
 
