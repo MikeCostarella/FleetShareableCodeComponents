@@ -128,7 +128,8 @@ jobs:
           repository: ${{ github.repository_owner }}/${{ steps.sib.outputs.prefix }}Parcels
           token: ${{ secrets.FLEET_DATA_TOKEN || github.token }}
           path: ${{ steps.sib.outputs.prefix }}Parcels
-          sparse-checkout: react-app/public/data/parcels.json
+          # parcels.json, or for a chunked county (Butler) the index plus parcels.0.json...
+          sparse-checkout: react-app/public/data/parcels*.json
           sparse-checkout-cone-mode: false
 
       - name: Check out the jurisdictions

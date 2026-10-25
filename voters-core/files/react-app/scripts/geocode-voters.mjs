@@ -250,7 +250,27 @@ function readOptionalJson(path, what) {
 // ---------------------------------------------------------------- indexes ---
 
 const addressPoints = readOptionalJson(ADDRESS_POINTS, "address points") ?? [];
-const parcels = readJson(PARCELS, "parcels");
+const parcels = readChunked(readJson(PARCELS, "parcels"), PARCELS, "parcels");
+
+/**
+ * A big county's Parcels app splits its roll into chunks and leaves an index
+ * in parcels.json ({ "chunks": ["parcels.0.json", ...], "count": N } - Butler,
+ * 165,860 parcels in three files). Follow the index; a plain array is used
+ * as it is.
+ */
+function readChunked(data, indexPath, what) {
+  if (Array.isArray(data)) return data;
+  if (!data || !Array.isArray(data.chunks)) {
+    throw new Error(`${indexPath}: expected an array of ${what} or a { chunks: [...] } index`);
+  }
+  const dir = dirname(indexPath);
+  const all = [];
+  for (const chunk of data.chunks) all.push(...readJson(join(dir, chunk), `${what} chunk ${chunk}`));
+  if (data.count && all.length !== data.count) {
+    console.warn(`  ${what}: index promises ${data.count} but the chunks hold ${all.length}`);
+  }
+  return all;
+}
 
 /** number + full street name + (city or ZIP) */
 const apExact = new Map();
@@ -281,6 +301,14 @@ for (const p of addressPoints) {
   push(apByNumberZip, `${number}|${zip}`, [core, point]);
 }
 
+/** The street part of a parcel's site address (see the loop below). */
+function parcelStreet(f) {
+  const parts = String(f ?? "").split(",")[0].trim().split(/\s{2,}/);
+  const last = parts[parts.length - 1];
+  if (parts.length >= 2 && /^[A-Z][A-Z .'-]*\s\d{5}(?:-\d{4})?$/i.test(last)) parts.pop();
+  return parts.join(" ");
+}
+
 /** Parcels carry no street type at all, so only the core forms are useful. */
 const pcCore = new Map();
 const pcAnywhere = new Map();
@@ -288,10 +316,11 @@ const pcByNumberZip = new Map();
 
 for (const p of parcels) {
   if (!p.y || !p.x) continue; // ~half the parcels have no geometry baked in
-  // Some counties' parcel layers append the place to the site address
-  // ("1344 PITTENGER RD, Weller Township" - Richland, Oct 2026). Only the part
-  // before the first comma is the street address.
-  const { number, rest } = splitAddress(String(p.f ?? "").split(",")[0]);
+  // Some counties' parcel layers append the place to the site address:
+  // "1344 PITTENGER RD, Weller Township" (Richland) after a comma, or
+  // "291  BURNS RD  FAIRFIELD 45014" (Butler) after a double space, with the
+  // ZIP last. Only the part before either is the street address.
+  const { number, rest } = splitAddress(parcelStreet(p.f));
   if (!number) continue;
   const point = [p.y, p.x];
   const zip = String(p.z ?? "");
