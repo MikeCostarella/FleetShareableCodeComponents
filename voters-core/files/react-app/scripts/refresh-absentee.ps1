@@ -1,6 +1,7 @@
 <#
   Fetch the county Board of Elections' absentee / early-voting file from the
-  state platform and, when it has changed, commit and push it - only the CSV.
+  state platform (or, per react-app\absentee-source.json, the Board's own
+  VoterView .xls) and, when it has changed, commit and push it - only the CSV.
 
   WHY THIS RUNS ON lvp-01 AND NOT IN GITHUB ACTIONS
   lookup.boe.ohio.gov sits behind Cloudflare, which answers GitHub's runners
@@ -72,14 +73,27 @@ try {
   Say "git pull --rebase --autostash"
   Run 'git pull' 'git pull --rebase --autostash origin main' | Out-Null
 
-  # Fetch, retrying network trouble (the PC may have just woken up).
+  # Which fetcher: the state platform unless react-app\absentee-source.json
+  # says otherwise ({ "fetcher": "voterview", "url": "https://.../details.xls" }
+  # for a Board that posts a VoterView .xls on its own site - Morrow).
   $tmp = Join-Path $env:TEMP "$Name-absentee-latest.csv"
   $fetch = Join-Path $App 'scripts\fetch-absentee-platform.mjs'
+  $fetchArgs = "`"--out=$tmp`""
+  $where = 'the state platform'
+  $srcFile = Join-Path $App 'absentee-source.json'
+  if (Test-Path $srcFile) {
+    $src = Get-Content $srcFile -Raw | ConvertFrom-Json
+    if ($src.fetcher -eq 'voterview') {
+      $fetch = Join-Path $App 'scripts\fetch-absentee-voterview.mjs'
+      $fetchArgs = "`"--url=$($src.url)`" `"--out=$tmp`""
+      $where = "the Board's VoterView report"
+    }
+  }
   $ok = $false
   for ($attempt = 1; $attempt -le 3 -and -not $ok; $attempt++) {
-    Say "Fetching from the state platform (attempt $attempt)"
+    Say "Fetching from $where (attempt $attempt)"
     try {
-      Run 'fetch' "node `"$fetch`" `"--out=$tmp`"" | Out-Null
+      Run 'fetch' "node `"$fetch`" $fetchArgs" | Out-Null
       $ok = $true
     } catch {
       Say "  $($_.Exception.Message)"

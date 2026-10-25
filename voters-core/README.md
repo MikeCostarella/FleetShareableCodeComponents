@@ -29,6 +29,22 @@ observed ("as observed 23 Oct 2026, Mahoning", "Thirty Trumbull VTDs") keep the
 real county's name - they are provenance, true in every copy. Use a placeholder
 only where the comment is about *this* app's county.
 
+## Early-vote sources
+
+Most Boards publish on the state platform, which `fetch-absentee-platform.mjs`
+reads. A Board that posts a VoterView "Absent Voter Details" `.xls` on its own
+site (Morrow) gets a `react-app/absentee-source.json` in its repo:
+
+```json
+{ "fetcher": "voterview", "url": "https://boe.<county>.gov/.../absent voter details.xls" }
+```
+
+`refresh-absentee.ps1` reads it and runs `fetch-absentee-voterview.mjs`, which
+matches each ballot to the roll by name and house number (the report's AV ID
+is not the county voter ID) and writes the same CSV layout the platform flow
+produces, so nothing downstream changes. The file is per-county and is not
+swept.
+
 ## Sweeping
 
 ```powershell
