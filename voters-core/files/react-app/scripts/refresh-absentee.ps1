@@ -80,11 +80,15 @@ try {
   # "...", "inPersonName": "..." } for a Board running Election Vault, whose two
   # lists are postbacks from its Public Records page (Butler, Franklin); or
   # { "fetcher": "hamilton", "siteUrl": "https://votehamiltoncountyohio.gov" }
-  # for the Hamilton Board's export API.
+  # for the Hamilton Board's export API (blocked by Cloudflare since Oct 2026 -
+  # Hamilton now uses { "fetcher": "browser", "recipe": "hamilton", "siteUrl":
+  # ..., "convert": "fetch-absentee-hamilton.mjs" }: fetch-absentee-browser.mjs
+  # gets the raw file through headless Chromium, the converter does the rest).
   $tmp = Join-Path $env:TEMP "$Name-absentee-latest.csv"
   $fetch = Join-Path $App 'scripts\fetch-absentee-platform.mjs'
   $fetchArgs = "`"--out=$tmp`""
   $where = 'the state platform'
+  $convert = $null
   $srcFile = Join-Path $App 'absentee-source.json'
   if (Test-Path $srcFile) {
     $src = Get-Content $srcFile -Raw | ConvertFrom-Json
@@ -98,6 +102,16 @@ try {
       $fetchArgs = "`"--site=$($src.siteUrl)`" `"--out=$tmp`""
       $where = "the Board's export API"
     }
+    if ($src.fetcher -eq 'browser') {
+      # Two steps: a headless browser gets the Board's raw file (Cloudflare or
+      # a JavaScript form in the way), then the Board's converter turns it into
+      # the platform-layout CSV. $raw is the browser's download.
+      $fetch = Join-Path $App 'scripts\fetch-absentee-browser.mjs'
+      $raw = Join-Path $env:TEMP "$Name-absentee-raw.dat"
+      $fetchArgs = "`"--recipe=$($src.recipe)`" `"--site=$($src.siteUrl)`" `"--out=$raw`""
+      $convert = Join-Path $App "scripts\$($src.convert)"
+      $where = "the Board's site through a browser ($($src.recipe) recipe)"
+    }
     if ($src.fetcher -eq 'electionvault') {
       $fetch = Join-Path $App 'scripts\fetch-absentee-electionvault.mjs'
       $fetchArgs = "`"--page=$($src.pageUrl)`" `"--mail-name=$($src.mailName)`" `"--inperson-name=$($src.inPersonName)`" `"--out=$tmp`""
@@ -109,6 +123,7 @@ try {
     Say "Fetching from $where (attempt $attempt)"
     try {
       Run 'fetch' "node `"$fetch`" $fetchArgs" | Out-Null
+      if ($convert) { Run 'convert' "node `"$convert`" `"--in=$raw`" `"--out=$tmp`"" | Out-Null }
       $ok = $true
     } catch {
       Say "  $($_.Exception.Message)"

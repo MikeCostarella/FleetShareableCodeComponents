@@ -65,6 +65,20 @@ Hamilton's Board generates a CSV on request through a small API and gets
 for `fetch-absentee-hamilton.mjs` (ask for the current election, request the
 export, download the file it names).
 
+A Board whose site turns plain requests away (Hamilton is behind Cloudflare's
+bot check, which no header can pass) or whose page is a JavaScript form gets
+
+```json
+{ "fetcher": "browser", "recipe": "hamilton", "siteUrl": "https://votehamiltoncountyohio.gov",
+  "convert": "fetch-absentee-hamilton.mjs" }
+```
+
+`fetch-absentee-browser.mjs` drives headless Chromium (Playwright, installed
+per app with `npm install --save-dev playwright; npx playwright install
+chromium`) through the named recipe to get the Board's raw file, then the
+named converter writes the platform-layout CSV. Playwright is not a
+dependency of the app build; only the apps that need it install it.
+
 The file is per-county and is not swept.
 
 ## Sweeping

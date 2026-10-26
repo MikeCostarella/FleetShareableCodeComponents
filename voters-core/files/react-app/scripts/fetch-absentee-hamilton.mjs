@@ -48,7 +48,21 @@ if (!OUT || !(args.site || args.in)) {
   process.exit(2);
 }
 
-const UA = "CountyVoters absentee refresh (github.com/MikeCostarella)";
+// The Board's site answers a browser and refuses anything else with 403 - a
+// WordPress firewall rule on the User-Agent - so the requests are sent with
+// the headers Chrome sends (recorded from the browser, 25 Oct 2026). Public
+// data, no sign-in; this is the same request a person makes on the page.
+const BROWSER_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+  "Accept": "*/*",
+  "Accept-Language": "en-US,en;q=0.9",
+  "sec-ch-ua": '"Not:A-Brand";v="8", "Chromium";v="156", "Google Chrome";v="156"',
+  "sec-ch-ua-mobile": "?0",
+  "sec-ch-ua-platform": '"Windows"',
+  "sec-fetch-dest": "empty",
+  "sec-fetch-mode": "cors",
+  "sec-fetch-site": "same-origin",
+};
 const squash = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
 const csv = (f) => (/[",\r\n]/.test(f) ? `"${f.replace(/"/g, '""')}"` : f);
 
@@ -59,14 +73,18 @@ async function api(site, path, init = {}) {
   const res = await fetch(url, {
     ...init,
     headers: {
-      "User-Agent": UA,
+      ...BROWSER_HEADERS,
       "X-Requested-With": "XMLHttpRequest",
       "Referer": `${site.replace(/\/$/, "")}/campaign-media/absentee-lists/`,
       ...(init.headers ?? {}),
     },
     redirect: "follow",
   });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText} from ${url}`);
+  if (!res.ok) {
+    const body = (await res.text()).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 400);
+    const server = res.headers.get("server") ?? "";
+    throw new Error(`${res.status} ${res.statusText} from ${url}${server ? ` (server: ${server})` : ""}\n  body: ${body}`);
+  }
   return res;
 }
 
