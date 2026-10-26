@@ -312,12 +312,39 @@ for (const p of addressPoints) {
   push(apByNumberZip, `${number}|${zip}`, [core, point]);
 }
 
+/** The roll's mailing cities, upper-cased, for stripping a place suffix off parcel addresses. */
+const ROLL_CITIES = new Set((data.cities ?? []).map((c) => String(c).toUpperCase().trim()).filter(Boolean));
+const ROLL_CITY_MAX_WORDS = Math.max(1, ...[...ROLL_CITIES].map((c) => c.split(/\s+/).length));
+
 /** The street part of a parcel's site address (see the loop below). */
 function parcelStreet(f) {
   const parts = String(f ?? "").split(",")[0].trim().split(/\s{2,}/);
   const last = parts[parts.length - 1];
   if (parts.length >= 2 && /^[A-Z][A-Z .'-]*\s\d{5}(?:-\d{4})?$/i.test(last)) parts.pop();
-  return parts.join(" ");
+  let s = parts.join(" ");
+  // Medina's auditor appends the place with SINGLE spaces: "3595 LENNOX CL
+  // BRUNSWICK 44212". Only an address that ends in a ZIP gets this treatment.
+  // Drop the ZIP, then the place: the roll's own city list says how many
+  // words it is ("VALLEY CITY"); failing that, cut after the last street
+  // type ("... CL"). An address with neither is left whole.
+  const zipped = s.match(/^(.*\S)\s+\d{5}(?:-\d{4})?$/);
+  if (zipped) {
+    s = zipped[1];
+    const w = s.toUpperCase().split(/\s+/);
+    let cut = -1;
+    for (let n = Math.min(ROLL_CITY_MAX_WORDS, w.length - 2); n >= 1 && cut < 0; n--) {
+      if (ROLL_CITIES.has(w.slice(-n).join(" "))) cut = w.length - n;
+    }
+    if (cut < 0) {
+      const toks = tokenize(s);
+      for (let i = toks.length - 2; i >= 1; i--) {
+        if (TYPE_SUFFIXES.has(toks[i])) { cut = i + 1; break; }
+      }
+      if (cut >= 0) return toks.slice(0, cut).join(" ");
+    }
+    if (cut > 0) s = w.slice(0, cut).join(" ");
+  }
+  return s;
 }
 
 /**
