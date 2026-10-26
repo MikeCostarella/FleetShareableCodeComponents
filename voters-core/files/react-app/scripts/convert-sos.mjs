@@ -455,7 +455,24 @@ function jurisdictionOf(row) {
   if (city) return titleCase(city);
   const twp = squash(row[C.township]).replace(/\s+ONLY$/i, "").replace(/\s+(TWP|TOWNSHIP)$/i, "");
   if (twp) return `${titleCase(twp)} Township`;
-  return "";
+  return jurisdictionFromPrecinct(row[C.precinct]);
+}
+
+/**
+ * Some Boards leave CITY / TOWNSHIP / VILLAGE empty for every voter (Cuyahoga,
+ * Oct 2026) but name their precincts after the municipality: "BRECKSVILLE-00-G",
+ * "OLMSTED TOWNSHIP-01-A", "WARRENSVILLE HTS-02-B", "CHAGRIN FALLS TWP-00-A".
+ * The part before the first "-NN-" is the jurisdiction. Only reached when the
+ * three columns are blank, so counties that fill them are unaffected.
+ */
+function jurisdictionFromPrecinct(precinct) {
+  const m = squash(precinct).match(/^(.*?)\s*-\s*\d\d-/);
+  if (!m) return "";
+  let name = m[1].trim().replace(/\s+VILLAGE$/i, "").replace(/\s+CITY$/i, "");
+  const twp = name.match(/^(.*?)\s+(TWP|TOWNSHIP)$/i);
+  if (twp) return `${titleCase(twp[1])} Township`;
+  name = name.replace(/\bHTS$/i, "HEIGHTS");
+  return titleCase(name);
 }
 
 // ---------------------------------------------------------------- voters ---
