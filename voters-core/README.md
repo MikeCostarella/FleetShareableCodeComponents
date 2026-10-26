@@ -96,6 +96,16 @@ the download, the converter writes the platform-layout CSV. Recipes so far:
 `hamilton` (WordPress API behind Cloudflare), `cuyahoga` (full-page POST form,
 Oct 2026).
 
+## stats.json
+
+Every build ends with `scripts/write-stats.mjs`, which summarises voters.json
+into `dist/data/stats.json` (a few KB): the roll, every election's turnout,
+the baseline general, and the election in progress - issued, returned, in
+person / by mail, by category, by party, and returned per day with running
+totals. It is derived, never committed, and lives only in the deployed site at
+`https://mikecostarella.github.io/<County>CountyVoters/data/stats.json`.
+`CurrentElectionStatistics` collects all of them twice a day. voters-core 1.9.0.
+
 ## Sweeping
 
 ```powershell
