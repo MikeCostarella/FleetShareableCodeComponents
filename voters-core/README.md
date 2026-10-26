@@ -81,6 +81,21 @@ dependency of the app build; only the apps that need it install it.
 
 The file is per-county and is not swept.
 
+A Board whose page is a JavaScript form with nothing replayable behind it, or
+that sits behind a bot check (Hamilton), gets a *recipe* in
+`fetch-absentee-browser.mjs` plus its own converter:
+
+```json
+{ "fetcher": "browser", "recipe": "cuyahoga", "siteUrl": "https://boe.cuyahogacounty.gov",
+  "convert": "fetch-absentee-cuyahoga.mjs" }
+```
+
+Playwright drives the machine's Chrome from the shared install under
+`%LOCALAPPDATA%\FleetTools\playwright`; the recipe fills the form and catches
+the download, the converter writes the platform-layout CSV. Recipes so far:
+`hamilton` (WordPress API behind Cloudflare), `cuyahoga` (full-page POST form,
+Oct 2026).
+
 ## Sweeping
 
 ```powershell

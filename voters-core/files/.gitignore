@@ -2,3 +2,5 @@
 # and they carry dates of birth. Download to SourceData/ and convert locally;
 # only the derived react-app/public/data/voters.json is committed.
 SourceData/SOS_*.txt
+# A Board's raw export kept beside the converted CSV while testing a converter
+SourceData/*raw*

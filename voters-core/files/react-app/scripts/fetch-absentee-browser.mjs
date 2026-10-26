@@ -14,6 +14,7 @@
  *
  *   node scripts/fetch-absentee-browser.mjs --recipe=hamilton --site=https://votehamiltoncountyohio.gov --out=<raw file path>
  *   node scripts/fetch-absentee-browser.mjs --recipe=hamilton ... --headed      (watch it, for debugging)
+ *   node scripts/fetch-absentee-browser.mjs --recipe=cuyahoga --site=https://boe.cuyahogacounty.gov --out=<raw file path>
  *
  * Needs Playwright, found in the first of these that has it:
  *   1. the app itself (node_modules/playwright)
@@ -117,6 +118,48 @@ const RECIPES = {
       page.waitForEvent("download", { timeout: 180_000 }),
       page.evaluate((f) => { window.location.href = `/download.php?file=${encodeURIComponent(f)}`; }, exported.filename),
     ]);
+    return download;
+  },
+
+  /**
+   * Cuyahoga: /candidates/Get-Vote-by-Mail-Labels-and-Lists is a plain form
+   * that POSTs to .../GetAbsenteeData and answers with the CSV. No bot check
+   * guards it (the reCAPTCHA badge on the page belongs to the "Was this page
+   * helpful?" widget), but it is a JavaScript form: the district list only
+   * appears after a district type is chosen, both dates are required, and
+   * the submit is a full-page POST, so a real browser is the simplest replay.
+   * Fills the form the way a person does (recorded 26 Oct 2026): the newest
+   * election, Date Issued from 1 January of its year to today, all parties,
+   * County Wide, CSV - every ballot of the election, returned or not. The
+   * download is Export-<yyyymmdd>-<hhmmss>.csv; fetch-absentee-cuyahoga.mjs
+   * converts it.
+   */
+  async cuyahoga(page) {
+    await page.goto(`${site}/candidates/Get-Vote-by-Mail-Labels-and-Lists`, { waitUntil: "domcontentloaded", timeout: 90_000 });
+    // <option>s are never "visible" to Playwright while the list is closed: wait for them to exist.
+    await page.waitForSelector("#ElectionInfoDDL option:nth-child(2)", { state: "attached", timeout: 60_000 });
+    // Options are "269|NOVEMBER 3, 2026 GENERAL ELECTION|GEN"; the first real one is the newest.
+    const election = await page.$eval("#ElectionInfoDDL option:nth-child(2)", (o) => ({ value: o.value, text: o.textContent.trim() }));
+    say(`election: ${election.text}`);
+    const year = (election.text.match(/\b(20\d\d)\b/) || [])[1] || String(new Date().getFullYear());
+    const today = new Date();
+    const mdy = (m, d, y) => `${String(m).padStart(2, "0")}/${String(d).padStart(2, "0")}/${y}`;
+    await page.selectOption("#ElectionInfoDDL", election.value);
+    await page.fill("#DateIssuedFrom", mdy(1, 1, year));
+    await page.fill("#DateIssuedTo", mdy(today.getMonth() + 1, today.getDate(), today.getFullYear()));
+    await page.selectOption("#PartyDDL", "99");                 // All
+    await page.selectOption("#DistrictTypeDDL", "ALL");         // County Wide - shows the district list
+    await page.waitForSelector("#DistrictDDL option[value='2']", { state: "attached", timeout: 30_000 });
+    await page.selectOption("#DistrictDDL", "2");               // COUNTY WIDE DISTRICT(ALL) - shows the precinct list
+    await page.waitForFunction(() => document.querySelector("#PrecinctDDL")?.options.length > 0, null, { timeout: 30_000 });
+    await page.check("input[name='selectFormat'][value='ForCSV']");
+    await page.waitForSelector("#btnExportData", { state: "visible", timeout: 15_000 });
+    say("requesting the CSV (the server takes a little while for the whole county)");
+    const [download] = await Promise.all([
+      page.waitForEvent("download", { timeout: 300_000 }),
+      page.click("#btnExportData"),
+    ]);
+    say(`download: ${download.suggestedFilename()}`);
     return download;
   },
 };

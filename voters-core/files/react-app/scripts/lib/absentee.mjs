@@ -263,6 +263,7 @@ function readPlatform(rows) {
     const appType = squash(r[C.appType]).toUpperCase();
     const partyRaw = squash(r[C.party]).toUpperCase();
 
+    if (ballots.has(Number(id))) reissued++; // same voter twice (not seen on the platform; Board exports that list reissues are collapsed by their converter)
     ballots.set(Number(id), {
       name: [first, middle, last, suffix].filter(Boolean).join(" "),
       lastName: last,
@@ -280,7 +281,6 @@ function readPlatform(rows) {
       returned,
       issue,
     });
-    if (ballots.size !== rowCount) reissued++; // same voter twice (not seen on the platform, but cheap to count)
   }
   return { format: "platform", rowCount, skipped, reissued, ballots };
 }
