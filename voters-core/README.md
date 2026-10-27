@@ -79,6 +79,21 @@ chromium`) through the named recipe to get the Board's raw file, then the
 named converter writes the platform-layout CSV. Playwright is not a
 dependency of the app build; only the apps that need it install it.
 
+Stark's Board posts its absentee spreadsheets - a cumulative "Absentee
+Ballots Returned" plus one "Absentee Ballots Mailed <date>" per day, with an
+archive - behind the county website's candidate sign-in (a shared login the
+Board gives out on request) and gets
+
+```json
+{ "fetcher": "stark", "pageUrl": "https://builder1.revize.com/revize/starkcountyoh/government/offices/board_of_elections/absentee_download.php" }
+```
+
+`fetch-absentee-stark.mjs` signs in with the login filed under
+`"stark-absentee": { "user", "pass" }` in `%LOCALAPPDATA%\Statehouse\secrets.json`
+(outside every repo), downloads every linked spreadsheet and writes one
+platform-layout CSV: Returned rows first, then each day's unreturned mailed
+ballots. Their voter_id is the county id, so no name matching.
+
 The file is per-county and is not swept.
 
 A Board whose page is a JavaScript form with nothing replayable behind it, or

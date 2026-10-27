@@ -80,6 +80,7 @@ try {
   # "...", "inPersonName": "..." } for a Board running Election Vault, whose two
   # lists are postbacks from its Public Records page (Butler, Franklin); or
   # { "fetcher": "hamilton", "siteUrl": "https://votehamiltoncountyohio.gov" }
+  # { "fetcher": "stark", "pageUrl": "https://builder1.revize.com/revize/starkcountyoh/.../absentee_download.php" }
   # for the Hamilton Board's export API (blocked by Cloudflare since Oct 2026 -
   # Hamilton now uses { "fetcher": "browser", "recipe": "hamilton", "siteUrl":
   # ..., "convert": "fetch-absentee-hamilton.mjs" }: fetch-absentee-browser.mjs
@@ -111,6 +112,13 @@ try {
       $fetchArgs = "`"--recipe=$($src.recipe)`" `"--site=$($src.siteUrl)`" `"--out=$raw`""
       $convert = Join-Path $App "scripts\$($src.convert)"
       $where = "the Board's site through a browser ($($src.recipe) recipe)"
+    }
+    if ($src.fetcher -eq 'stark') {
+      # The Board's absentee spreadsheets behind the website's candidate
+      # sign-in; the login is in %LOCALAPPDATA%\Statehouse\secrets.json.
+      $fetch = Join-Path $App 'scripts\fetch-absentee-stark.mjs'
+      $fetchArgs = "`"--page=$($src.pageUrl)`" `"--out=$tmp`""
+      $where = "the Board's absentee download page"
     }
     if ($src.fetcher -eq 'electionvault') {
       $fetch = Join-Path $App 'scripts\fetch-absentee-electionvault.mjs'
