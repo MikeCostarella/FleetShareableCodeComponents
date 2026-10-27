@@ -113,10 +113,13 @@ const STREET_TYPES = {
   // LP (LOOP), PW (PKWY), PI (PIKE), TE (TER). Not PK: "PARK" is a street
   // NAME far more often than a type ("438 N PARK AVE"), so it stays a word.
   BL: "BLVD", WY: "WAY", CR: "CIR", LP: "LOOP", PW: "PKWY", PI: "PIKE", TE: "TER",
+  // Montgomery's auditor spells out what the roll abbreviates: "CAPTAINS
+  // BRIDGE" for "CAPTAINS BRG", "SAINT NICHOLAS AVE" for "ST NICHOLAS AVE".
+  BRIDGE: "BRG", SAINT: "ST",
 };
 const TYPE_SUFFIXES = new Set([
   "RD", "ST", "AVE", "DR", "LN", "CT", "BLVD", "CIR", "PL", "TER", "TRL",
-  "PKWY", "HWY", "SQ", "WAY", "RUN", "PT", "LOOP", "PATH", "XING", "PIKE",
+  "PKWY", "HWY", "SQ", "WAY", "RUN", "PT", "LOOP", "PATH", "XING", "PIKE", "BRG",
 ]);
 // Longest alternatives first so "ST RTE" isn't eaten by the "ST RT" branch.
 const ROUTE_RE =
@@ -139,13 +142,14 @@ function tokenize(street) {
   s = s.replace(/\bUS\s+(?:HWY\s+)?(?:SR\s+)?(?=\d)/g, "SR ");
   // County and township roads: "CO RD 170" on the roll, "CO 170 RD" from
   // Morrow's auditor, "CR 170" / "TR 134" elsewhere - all "CO RD 170" / "TWP RD 134".
+  // The number may carry a letter (Miami's "COUNTY ROAD 25A" / "CO RD 25A").
   s = s
-    .replace(/\b(?:CO|CR|CTY|COUNTY)\s+(?:RD|ROAD)\s+(\d+)\b/g, "CO RD $1")
-    .replace(/\b(?:CO|CTY|COUNTY)\s+(\d+)\s+(?:RD|ROAD)\b/g, "CO RD $1")
-    .replace(/\bCR\s+(\d+)\b/g, "CO RD $1")
-    .replace(/\b(?:TWP|TR|TOWNSHIP)\s+(?:RD|ROAD)\s+(\d+)\b/g, "TWP RD $1")
-    .replace(/\b(?:TWP|TOWNSHIP)\s+(\d+)\s+(?:RD|ROAD)\b/g, "TWP RD $1")
-    .replace(/\b(?:TR|TWP)\s+(\d+)\b/g, "TWP RD $1");
+    .replace(/\b(?:CO|CR|CTY|COUNTY)\s+(?:RD|ROAD)\s+(\d+[A-Z]?)\b/g, "CO RD $1")
+    .replace(/\b(?:CO|CTY|COUNTY)\s+(\d+[A-Z]?)\s+(?:RD|ROAD)\b/g, "CO RD $1")
+    .replace(/\bCR\s+(\d+[A-Z]?)\b/g, "CO RD $1")
+    .replace(/\b(?:TWP|TR|TOWNSHIP)\s+(?:RD|ROAD)\s+(\d+[A-Z]?)\b/g, "TWP RD $1")
+    .replace(/\b(?:TWP|TOWNSHIP)\s+(\d+[A-Z]?)\s+(?:RD|ROAD)\b/g, "TWP RD $1")
+    .replace(/\b(?:TR|TWP)\s+(\d+[A-Z]?)\b/g, "TWP RD $1");
   s = s.replace(/[^A-Z0-9 ]/g, " ");
   return s
     .split(/\s+/)
@@ -166,6 +170,17 @@ function withoutQuadrant(rest) {
   const r = [...rest];
   while (r.length && DIRECTIONALS.has(r[r.length - 1])) r.pop();
   return r;
+}
+
+/** The directional a street name ends with, after any type suffix: "MAIN ST W" -> "W"; else null. */
+function trailingDirectional(rest) {
+  const r = [...rest];
+  while (r.length && DIRECTIONALS.has(r[r.length - 1])) r.pop();
+  if (r.length === rest.length) {
+    // maybe the directional sits before the type: "MAIN W ST" is not a form we see; only after it
+    return null;
+  }
+  return rest[rest.length - 1];
 }
 
 /** Street name with the trailing directionals AND the type suffix removed. */
@@ -218,19 +233,35 @@ const push = (map, key, value) => {
 };
 
 /** Candidates whose core name is a prefix of the wanted one, or vice versa. */
-function prefixMatches(candidates, wanted) {
+/**
+ * Candidates whose name is a word-prefix of the wanted name or vice versa
+ * (YOUNGSTOWN / YOUNGSTOWN HUBBARD), allowing either side to truncate a word
+ * to four letters or more ("KESSLER COWL" / "KESSLER COWLESVILLE", "KESS
+ * FRED" / "KESSLER FRED"). With `oneStreet`, every match must be the same street
+ * name - used for the no-ZIP bucket, where the candidates come from the
+ * whole county and "100 PARK" must not land on "100 PARKWOOD" in another town.
+ */
+function prefixMatches(candidates, wanted, oneStreet = false) {
   if (!candidates || wanted.length === 0) return [];
   const out = [];
+  const names = new Set();
   for (const [name, point] of candidates) {
     if (name.length === 0) continue;
     const [short, long] = name.length <= wanted.length ? [name, wanted] : [wanted, name];
     let ok = true;
     for (let i = 0; i < short.length; i++) {
-      if (short[i] !== long[i]) { ok = false; break; }
+      if (short[i] === long[i]) continue;
+      const a = short[i], b = long[i];
+      // Either side may truncate a word: the roll's "S KESS FRED RD" is the
+      // auditor's "S KESSLER FRED RD"; the auditor's "FRED GARLAND RD" is the
+      // roll's "FREDERICK GARLAND RD". Four letters or more, so "MAIN" never
+      // stands in for "MAINE" by way of "MAI".
+      const trunc = a.length >= 4 && b.length >= 4 && (b.startsWith(a) || a.startsWith(b));
+      if (!trunc) { ok = false; break; }
     }
-    if (ok) out.push(point);
+    if (ok) { out.push(point); names.add(name.join(" ")); }
   }
-  return out;
+  return oneStreet && names.size > 1 ? [] : out;
 }
 
 function readJson(path, what) {
@@ -400,6 +431,19 @@ for (const p of parcels) {
     push(pcCore, `${number}|${coreStr}|${zip}`, point);
     push(pcAnywhere, `${number}|${coreStr}`, point);
     push(pcByNumberZip, `${number}|${zip}`, [core, point]);
+    // Some auditors write the directional AFTER the type ("101 MAIN ST W",
+    // Miami; Morrow's "HIGH ST W") where the roll has "101 W MAIN ST". The
+    // core above drops it, so 101 N MAIN and 101 S MAIN collapse into one
+    // ambiguous "101 MAIN"; index the leading form too, so the voter's own
+    // core ("W MAIN") finds exactly this parcel.
+    const lead = trailingDirectional(rest);
+    if (lead && !DIRECTIONALS.has(core[0])) {
+      const led = [lead, ...core];
+      const ledStr = led.join(" ");
+      push(pcCore, `${number}|${ledStr}|${zip}`, point);
+      push(pcAnywhere, `${number}|${ledStr}`, point);
+      push(pcByNumberZip, `${number}|${zip}`, [led, point]);
+    }
   }
 }
 
@@ -469,11 +513,19 @@ for (const v of data.voters) {
                              lookup(pcAnywhere, `${number}|${noLeadStr}`)));
     if (p) { point = p; tier = GEO.PARCEL; }
   }
-  // 6: one name is a prefix of the other, same house number and ZIP.
+  // 6: one name is a prefix of the other, same house number and ZIP. Parcel
+  // layers with no ZIP at all (Miami, Montgomery) sit in the "number|" bucket,
+  // which spans the county, so there every match must be one street name.
   if (!point) {
     for (const byNumberZip of [apByNumberZip, pcByNumberZip]) {
-      const pts = prefixMatches(byNumberZip.get(`${number}|${zip}`), core);
-      if (samePlace(pts)) { point = centroid(pts); tier = GEO.PREFIX; break; }
+      for (const [bucket, oneStreet] of [[`${number}|${zip}`, false], [`${number}|`, true]]) {
+        const cands = byNumberZip.get(bucket);
+        if (!cands) continue;
+        let pts = prefixMatches(cands, core, oneStreet);
+        if (!samePlace(pts) && noLead) pts = prefixMatches(cands, noLead, oneStreet);
+        if (samePlace(pts)) { point = centroid(pts); tier = GEO.PREFIX; break; }
+      }
+      if (point) break;
     }
   }
 
