@@ -35,8 +35,8 @@
  *   TR Voter picked up a ballot from early in-person   -> HAND CARRY
  *   N  Vote-by-Mail voter confined to a nursing home   -> NURSING HOME
  *   G  Nursing home with in-person assistance          -> NURSING HOME
- *   H  Hospitalized after the request period closed    -> HAND CARRY
- *   J  Voter confined to a jail                        -> MAIL
+ *   H  Hospitalized after the request period closed    -> HOSPITAL
+ *   J  Voter confined to a jail                        -> JAIL
  *   M  Military (UOCAVA)                               -> MILITARY
  *   ME Military, electronic (UOCAVA)                   -> UOCAVA EMAIL
  *   O  Overseas (UOCAVA)                               -> CIVILIAN OVERSEAS
@@ -89,9 +89,10 @@ function parseCsv(text) {
 }
 
 const CATEGORY = {
-  "B": "MAIL", "A": "MAIL", "J": "MAIL", "17 YR": "MAIL", "17YR": "MAIL",
+  "B": "MAIL", "A": "MAIL", "17 YR": "MAIL", "17YR": "MAIL",
+  "J": "JAIL", "H": "HOSPITAL",
   "I": "IN OFFICE",
-  "TR": "HAND CARRY", "H": "HAND CARRY",
+  "TR": "HAND CARRY",
   "N": "NURSING HOME", "G": "NURSING HOME",
   "M": "MILITARY", "ME": "UOCAVA EMAIL",
   "O": "CIVILIAN OVERSEAS", "OE": "UOCAVA EMAIL",

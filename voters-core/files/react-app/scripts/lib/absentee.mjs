@@ -68,6 +68,8 @@ export const BALLOT_CATEGORIES = {
   PA: "Problem application",
   HC: "Hand carried",
   AB: "Accessible ballot",
+  JL: "Confined to a jail",
+  HO: "Hospitalized",
   TO: "Absentee (code TO)",
 };
 
@@ -82,6 +84,10 @@ const PLATFORM_APP_TYPES = {
   "PROBLEM APP": "PA",
   "HAND CARRY": "HC",
   "ACCESSIBLE BALLOT": "AB",
+  // Seen on the platform from Lorain (Oct 2026): a ballot delivered to a jail
+  // or a hospital after the mail deadline.
+  "JAIL": "JL",
+  "HOSPITAL": "HO",
   // Written by fetch-absentee-electionvault.mjs (Butler's Election Vault
   // distinguishes these; the platform itself folds them into UOCAVA).
   "CIVILIAN OVERSEAS": "CO",

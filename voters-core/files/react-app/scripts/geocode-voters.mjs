@@ -316,20 +316,29 @@ for (const p of addressPoints) {
 const ROLL_CITIES = new Set((data.cities ?? []).map((c) => String(c).toUpperCase().trim()).filter(Boolean));
 const ROLL_CITY_MAX_WORDS = Math.max(1, ...[...ROLL_CITIES].map((c) => c.split(/\s+/).length));
 
-/** The street part of a parcel's site address (see the loop below). */
-function parcelStreet(f) {
+/**
+ * The street part of a parcel's site address (see the loop below), and the
+ * ZIP it carried, for layers that write the place into the address but leave
+ * the ZIP column empty (Stark).
+ */
+function parcelStreetZip(f) {
   const parts = String(f ?? "").split(",")[0].trim().split(/\s{2,}/);
   const last = parts[parts.length - 1];
-  if (parts.length >= 2 && /^[A-Z][A-Z .'-]*\s\d{5}(?:-\d{4})?$/i.test(last)) parts.pop();
+  let zip = "";
+  if (parts.length >= 2 && /^[A-Z][A-Z .'-]*\s\d{5}(?:-\d{4})?$/i.test(last)) { zip = last.match(/(\d{5})/)[1]; parts.pop(); }
   let s = parts.join(" ");
   // Medina's auditor appends the place with SINGLE spaces: "3595 LENNOX CL
-  // BRUNSWICK 44212". Only an address that ends in a ZIP gets this treatment.
-  // Drop the ZIP, then the place: the roll's own city list says how many
-  // words it is ("VALLEY CITY"); failing that, cut after the last street
-  // type ("... CL"). An address with neither is left whole.
-  const zipped = s.match(/^(.*\S)\s+\d{5}(?:-\d{4})?$/);
+  // BRUNSWICK 44212"; Stark's adds the state and a spaced ZIP+4: "3080
+  // BEECHWOOD AVE ALLIANCE OH 44601 4498". Only an address that ends in a
+  // ZIP gets this treatment. Drop the ZIP (and +4, and a trailing state),
+  // then the place: the roll's own city list says how many words it is
+  // ("NORTH CANTON"); failing that, cut after the last street type. An
+  // address with neither is left whole.
+  const zipped = s.match(/^(.*\S)\s+(\d{5})(?:[- ]\d{4})?$/);
   if (zipped) {
     s = zipped[1];
+    zip = zip || zipped[2];
+    s = s.replace(/\s+OH$/i, "");
     const w = s.toUpperCase().split(/\s+/);
     let cut = -1;
     for (let n = Math.min(ROLL_CITY_MAX_WORDS, w.length - 2); n >= 1 && cut < 0; n--) {
@@ -340,12 +349,13 @@ function parcelStreet(f) {
       for (let i = toks.length - 2; i >= 1; i--) {
         if (TYPE_SUFFIXES.has(toks[i])) { cut = i + 1; break; }
       }
-      if (cut >= 0) return toks.slice(0, cut).join(" ");
+      if (cut >= 0) return [toks.slice(0, cut).join(" "), zip];
     }
     if (cut > 0) s = w.slice(0, cut).join(" ");
   }
-  return s;
+  return [s, zip];
 }
+function parcelStreet(f) { return parcelStreetZip(f)[0]; }
 
 /**
  * A parcel that is a double or a small row carries a number range, "1025 -
@@ -377,11 +387,13 @@ for (const p of parcels) {
   // "1344 PITTENGER RD, Weller Township" (Richland) after a comma, or
   // "291  BURNS RD  FAIRFIELD 45014" (Butler) after a double space, with the
   // ZIP last. Only the part before either is the street address.
+  const zipFromAddress = parcelStreetZip(p.f)[1];
   for (const addr of parcelAddresses(p.f)) {
     const { number, rest } = splitAddress(addr);
     if (!number) continue;
     const point = [p.y, p.x];
-    const zip = String(p.z ?? "");
+    // The layer's ZIP column, or the one written into the address when the column is empty (Stark).
+    const zip = String(p.z ?? "").slice(0, 5) || zipFromAddress;
     const core = coreName(rest);
     const coreStr = core.join(" ");
     push(pcCore, `${number}|${coreStr}|${zip}`, point);

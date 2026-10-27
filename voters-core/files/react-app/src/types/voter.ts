@@ -138,6 +138,8 @@ export const BALLOT_CATEGORY_LABELS: Record<string, string> = {
   PA: "Problem application",
   HC: "Hand carried",
   AB: "Accessible ballot",
+  JL: "Confined to a jail",
+  HO: "Hospitalized",
   TO: "Absentee (code TO)",
 };
 
