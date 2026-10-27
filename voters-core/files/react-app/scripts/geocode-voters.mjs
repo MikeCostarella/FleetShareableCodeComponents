@@ -392,8 +392,9 @@ for (const p of parcels) {
     const { number, rest } = splitAddress(addr);
     if (!number) continue;
     const point = [p.y, p.x];
-    // The layer's ZIP column, or the one written into the address when the column is empty (Stark).
-    const zip = String(p.z ?? "").slice(0, 5) || zipFromAddress;
+    // The ZIP written into the address when there is one (Stark has no ZIP
+    // column; Fairfield's sometimes holds the house number), else the column.
+    const zip = zipFromAddress || String(p.z ?? "").slice(0, 5);
     const core = coreName(rest);
     const coreStr = core.join(" ");
     push(pcCore, `${number}|${coreStr}|${zip}`, point);

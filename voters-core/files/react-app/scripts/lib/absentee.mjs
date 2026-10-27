@@ -77,6 +77,7 @@ export const BALLOT_CATEGORIES = {
 const PLATFORM_APP_TYPES = {
   "MAIL": "A",
   "IN OFFICE": "EV",
+  "IN OFFICE OTHER": "EV",   // Fairfield, Oct 2026
   "NURSING HOME": "N",
   "CURBSIDE": "CB",
   "UOCAVA EMAIL": "UE",
