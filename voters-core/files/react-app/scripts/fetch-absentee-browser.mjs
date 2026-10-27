@@ -15,6 +15,9 @@
  *   node scripts/fetch-absentee-browser.mjs --recipe=hamilton --site=https://votehamiltoncountyohio.gov --out=<raw file path>
  *   node scripts/fetch-absentee-browser.mjs --recipe=hamilton ... --headed      (watch it, for debugging)
  *   node scripts/fetch-absentee-browser.mjs --recipe=cuyahoga --site=https://boe.cuyahogacounty.gov --out=<raw file path>
+ *   node scripts/fetch-absentee-browser.mjs --recipe=stark --site=https://builder1.revize.com --out=<raw folder path>
+ *     (a recipe that returns several files - Stark's Returned + daily Mailed
+ *     spreadsheets - saves them into --out as a folder; its converter takes --in=<that folder>)
  *
  * Needs Playwright, found in the first of these that has it:
  *   1. the app itself (node_modules/playwright)
@@ -35,7 +38,7 @@
  *   { "fetcher": "browser", "recipe": "hamilton", "siteUrl": "...", "convert": "fetch-absentee-hamilton.mjs" }
  * and then runs the named converter with --in=<the raw file>.
  */
-import { mkdirSync, renameSync, existsSync } from "node:fs";
+import { mkdirSync, renameSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -162,7 +165,84 @@ const RECIPES = {
     say(`download: ${download.suggestedFilename()}`);
     return download;
   },
+
+  /**
+   * Stark: the Board's absentee spreadsheets sit on the county website's CMS
+   * host behind a sign-in form on the page (the shared candidate login from
+   * the Board's guide, filed under "stark-absentee" in
+   * %LOCALAPPDATA%\Statehouse\secrets.json) and Cloudflare, which turns plain
+   * requests away. The page lists "Absentee
+   * Ballots Returned" (cumulative) and one "Absentee Ballots Mailed <date>"
+   * per day; every one is downloaded and returned as a set of files for
+   * fetch-absentee-stark.mjs --in=<folder>.
+   */
+  async stark(page) {
+    await page.goto(`${site}/revize/starkcountyoh/government/offices/board_of_elections/absentee_download.php`, { waitUntil: "domcontentloaded", timeout: 90_000 });
+    await clearCloudflare(page);
+    // The page itself carries the sign-in form ("Sign in to view this page":
+    // user / pass / Remember me); the profile keeps the session afterwards,
+    // so the form is only there on the first run or after it expires.
+    if (await page.$("input[name='pass']")) {
+      const { username, password } = starkLogin();
+      say("signing in");
+      await page.fill("input[name='user']", username);
+      await page.fill("input[name='pass']", password);
+      const remember = await page.$("input[name='rememberMe']");
+      if (remember && !(await remember.isChecked())) await remember.check();
+      await Promise.all([
+        page.waitForLoadState("domcontentloaded"),
+        page.click("button:has-text('Sign in'), input[type='submit'], button[type='submit']"),
+      ]);
+      await page.waitForTimeout(1500);
+      await clearCloudflare(page);
+      if (await page.$("input[name='pass']")) {
+        const text = (await page.evaluate(() => document.body?.innerText || "")).replace(/\s+/g, " ").slice(0, 300);
+        throw new Error(`the Board's page did not accept the login in %LOCALAPPDATA%\\Statehouse\\secrets.json ("stark-absentee"): ${text}`);
+      }
+    }
+    const links = (await page.$$eval("a[href]", (as) => as.map((a) => ({ text: (a.textContent || "").replace(/\s+/g, " ").trim(), href: a.href }))))
+      .filter((l) => /absentee ballots (returned|mailed)/i.test(l.text));
+    if (!links.some((l) => /returned/i.test(l.text))) {
+      // Say what was there instead: the URL we ended on, the title, any
+      // form fields (an HTML sign-in form?), the first lines of text, and a
+      // screenshot beside --out.
+      const title = await page.title();
+      const url = page.url();
+      const inputs = await page.$$eval("input", (is) => is.map((i) => `${i.type}:${i.name || i.id || "?"}`));
+      const text = (await page.evaluate(() => document.body?.innerText || "")).replace(/\s+/g, " ").slice(0, 400);
+      try { mkdirSync(dirname(OUT), { recursive: true }); await page.screenshot({ path: `${OUT}.png`, fullPage: true }); } catch { /* best effort */ }
+      throw new Error(`no "Absentee Ballots Returned" link on the page.\n  url: ${url}\n  title: ${title}\n  inputs: ${inputs.join(", ") || "none"}\n  text: ${text}\n  screenshot: ${OUT}.png`);
+    }
+    say(`${links.length} spreadsheet(s) linked (${links.filter((l) => /mailed/i.test(l.text)).length} daily Mailed + Returned)`);
+    const files = [];
+    for (const l of links) {
+      const [download] = await Promise.all([
+        page.waitForEvent("download", { timeout: 120_000 }),
+        page.evaluate((h) => { window.location.href = h; }, l.href),
+      ]);
+      const failure = await download.failure();
+      if (failure) throw new Error(`${l.text}: download failed: ${failure}`);
+      files.push({ name: download.suggestedFilename() || `${l.text}.xlsx`, buffer: readFileSync(await download.path()) });
+    }
+    return files;
+  },
 };
+
+/** The Board's candidate login, from the secrets file outside every repo (or the environment). */
+function starkLogin() {
+  const secrets = join(LOCAL, "Statehouse", "secrets.json");
+  if (process.env.STARK_ABSENTEE_USER && process.env.STARK_ABSENTEE_PASS) {
+    return { username: process.env.STARK_ABSENTEE_USER, password: process.env.STARK_ABSENTEE_PASS };
+  }
+  try {
+    const s = JSON.parse(readFileSync(secrets, "utf8"))["stark-absentee"];
+    if (s?.user && s?.pass) return { username: s.user, password: s.pass };
+  } catch { /* reported below */ }
+  throw new Error(`no Stark login: add "stark-absentee": { "user": "...", "pass": "..." } to ${secrets}`);
+}
+
+/** Per-recipe browser-context options (none yet; a recipe needing HTTP auth would add httpCredentials here). */
+const RECIPE_CONTEXT = {};
 
 /** Wait out Cloudflare's interstitial, if there is one. */
 async function clearCloudflare(page) {
@@ -201,6 +281,7 @@ async function launch(userAgent) {
   const options = {
     headless: !args.headed,
     acceptDownloads: true,
+    ...(RECIPE_CONTEXT[args.recipe]?.() ?? {}),
     args: ["--disable-blink-features=AutomationControlled"],
     ignoreDefaultArgs: ["--enable-automation"],
     viewport: { width: 1280, height: 900 },
@@ -226,8 +307,15 @@ say(`${flavour} ${ua.match(/Chrome\/(\d+)/)?.[1] || ""}, profile ${profileDir}`)
 try {
   const result = await recipe(page);
   mkdirSync(dirname(OUT), { recursive: true });
-  if (Buffer.isBuffer(result)) {
-    const { writeFileSync } = await import("node:fs");
+  if (Array.isArray(result)) {
+    // Several files: OUT is a folder, emptied first so a day that vanished
+    // from the Board's archive does not linger.
+    const { rmSync } = await import("node:fs");
+    rmSync(OUT, { recursive: true, force: true });
+    mkdirSync(OUT, { recursive: true });
+    for (const f of result) writeFileSync(join(OUT, f.name.replace(/[\\/:*?"<>|]/g, "_")), f.buffer);
+    say(`saved ${result.length} file(s) into ${OUT}`);
+  } else if (Buffer.isBuffer(result)) {
     writeFileSync(OUT, result);
   } else {
     const failure = await result.failure();
@@ -236,8 +324,10 @@ try {
     if (existsSync(OUT)) { const { unlinkSync } = await import("node:fs"); unlinkSync(OUT); }
     renameSync(tmp, OUT);
   }
-  const { statSync } = await import("node:fs");
-  say(`saved ${OUT} (${(statSync(OUT).size / 1048576).toFixed(1)} MB)`);
+  if (!Array.isArray(result)) {
+    const { statSync } = await import("node:fs");
+    say(`saved ${OUT} (${(statSync(OUT).size / 1048576).toFixed(1)} MB)`);
+  }
 } finally {
   await context.close();
 }

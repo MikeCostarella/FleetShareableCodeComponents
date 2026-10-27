@@ -1,12 +1,16 @@
 /**
- * Download the Stark County Board of Elections' absentee spreadsheets and
- * write them as one CSV in the state platform's column layout, which
- * scripts/lib/absentee.mjs already reads. The twin of fetch-absentee-platform.mjs
- * for Stark; refresh-absentee.ps1 picks it when react-app/absentee-source.json says
- *   { "fetcher": "stark", "pageUrl": "https://builder1.revize.com/revize/starkcountyoh/government/offices/board_of_elections/absentee_download.php" }
+ * Convert the Stark County Board of Elections' absentee spreadsheets into one
+ * CSV in the state platform's column layout, which scripts/lib/absentee.mjs
+ * already reads. The download itself is done by fetch-absentee-browser.mjs
+ * (recipe "stark"): the Board's page sits behind Cloudflare, which turns plain
+ * requests away (403 whatever the headers, 27 Oct 2026), so a real browser
+ * signs in and saves every spreadsheet into a folder; refresh-absentee.ps1
+ * runs the two in turn when react-app/absentee-source.json says
+ *   { "fetcher": "browser", "recipe": "stark", "siteUrl": "https://builder1.revize.com",
+ *     "convert": "fetch-absentee-stark.mjs" }
  *
- *   node scripts/fetch-absentee-stark.mjs --page=<url> "--out=../SourceData/StarkCounty_absentee 2026 general.csv"
- *   node scripts/fetch-absentee-stark.mjs --in=../SourceData --out=...     (spreadsheets already downloaded)
+ *   node scripts/fetch-absentee-stark.mjs --in=<folder of .xlsx> "--out=../SourceData/StarkCounty_absentee 2026 general.csv"
+ *   node scripts/fetch-absentee-stark.mjs --page=<url> --out=...   (direct download; only if Cloudflare ever goes away)
  *
  * THE BOARD'S PAGE (Election Operations Manager's guide, Aug 2026; recorded 27 Oct 2026)
  * The "Absentee Download" page sits behind the website's HTTP sign-in, a
@@ -85,8 +89,9 @@ async function collect() {
     const dir = resolve(APP, args.in);
     for (const f of readdirSync(dir).filter((f) => /\.xlsx?$/i.test(f))) {
       const buffer = readFileSync(join(dir, f));
-      const kind = classify(buffer);
-      if (kind) files.push({ kind, label: f, buffer });
+      const c = classify(buffer, f);
+      if (c) files.push({ kind: c.kind, sheet: c.sheet, label: f, buffer });
+      else console.log(`  ${f}: not one of the Board's absentee spreadsheets - skipped`);
     }
     if (!files.length) throw new Error(`no Stark absentee spreadsheets in ${dir}`);
     return files;
@@ -111,21 +116,30 @@ async function collect() {
     const r = await fetch(l.url, { headers, redirect: "follow" });
     if (!r.ok) throw new Error(`${l.label}: ${r.status} ${r.statusText} (${l.url})`);
     const buffer = Buffer.from(await r.arrayBuffer());
-    if (!classify(buffer)) throw new Error(`${l.label}: not a spreadsheet with the Board's columns (${l.url})`);
-    files.push({ kind: l.kind, label: l.label, buffer });
+    const c = classify(buffer, l.label);
+    if (!c) throw new Error(`${l.label}: not a spreadsheet with the Board's columns (${l.url})`);
+    files.push({ kind: l.kind, sheet: c.sheet, label: l.label, buffer });
   }
   return files;
 }
 
-/** "returned" / "mailed" by the sheet's name and header row, else null. */
-function classify(buffer) {
+/**
+ * { kind: "returned" | "mailed", sheet } for a workbook with the Board's
+ * columns on some sheet, else null. The kind comes from the sheet's name,
+ * then the file's; a sheet with the columns and no telling name is a daily
+ * Mailed file (the Returned one is always named).
+ */
+function classify(buffer, label = "") {
   let wb;
   try { wb = XLSX.read(buffer, { type: "buffer" }); } catch { return null; }
-  const name = wb.SheetNames[0] ?? "";
-  const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: false, defval: "" });
-  const head = (rows[0] ?? []).map((h) => squash(h));
-  if (!head.includes("voter_id") || !head.includes("Date_Returned")) return null;
-  return /returned/i.test(name) ? "returned" : /mailed/i.test(name) ? "mailed" : null;
+  for (const name of wb.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: false, defval: "", range: 0 });
+    const head = (rows[0] ?? []).map((h) => squash(h));
+    if (!head.includes("voter_id") || !head.includes("Date_Returned")) continue;
+    const hint = `${name} ${label}`;
+    return { kind: /returned/i.test(hint) ? "returned" : "mailed", sheet: name };
+  }
+  return null;
 }
 
 // -------------------------------------------------------------- convert ---
@@ -156,7 +170,7 @@ const byVoter = new Map(); // id -> { r, returned }
 let rowsIn = 0, dupes = 0, skipped = 0;
 for (const f of files.sort((a, b) => (a.kind === "returned" ? -1 : 1) - (b.kind === "returned" ? -1 : 1))) {
   const wb = XLSX.read(f.buffer, { type: "buffer" });
-  const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: "" });
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[f.sheet], { header: 1, raw: false, defval: "" });
   const head = rows[0].map((h) => squash(h));
   const col = {};
   head.forEach((h, i) => { if (!(h in col)) col[h] = i; });

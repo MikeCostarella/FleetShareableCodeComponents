@@ -81,18 +81,20 @@ dependency of the app build; only the apps that need it install it.
 
 Stark's Board posts its absentee spreadsheets - a cumulative "Absentee
 Ballots Returned" plus one "Absentee Ballots Mailed <date>" per day, with an
-archive - behind the county website's candidate sign-in (a shared login the
-Board gives out on request) and gets
+archive - on the county website's CMS host, behind its HTTP sign-in (a shared
+candidate login the Board gives out on request) and Cloudflare, and gets
 
 ```json
-{ "fetcher": "stark", "pageUrl": "https://builder1.revize.com/revize/starkcountyoh/government/offices/board_of_elections/absentee_download.php" }
+{ "fetcher": "browser", "recipe": "stark", "siteUrl": "https://builder1.revize.com",
+  "convert": "fetch-absentee-stark.mjs" }
 ```
 
-`fetch-absentee-stark.mjs` signs in with the login filed under
+The `stark` recipe hands the browser the login filed under
 `"stark-absentee": { "user", "pass" }` in `%LOCALAPPDATA%\Statehouse\secrets.json`
-(outside every repo), downloads every linked spreadsheet and writes one
-platform-layout CSV: Returned rows first, then each day's unreturned mailed
-ballots. Their voter_id is the county id, so no name matching.
+(outside every repo), downloads every linked spreadsheet into a folder, and
+`fetch-absentee-stark.mjs --in=<folder>` writes one platform-layout CSV:
+Returned rows first, then each day's unreturned mailed ballots. Their
+voter_id is the county id, so no name matching.
 
 The file is per-county and is not swept.
 
@@ -109,7 +111,7 @@ Playwright drives the machine's Chrome from the shared install under
 `%LOCALAPPDATA%\FleetTools\playwright`; the recipe fills the form and catches
 the download, the converter writes the platform-layout CSV. Recipes so far:
 `hamilton` (WordPress API behind Cloudflare), `cuyahoga` (full-page POST form,
-Oct 2026).
+Oct 2026), `stark` (HTTP sign-in + Cloudflare, several files, Oct 2026).
 
 ## stats.json
 
