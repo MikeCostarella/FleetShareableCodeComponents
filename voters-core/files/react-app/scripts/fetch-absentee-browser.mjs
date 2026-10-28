@@ -226,6 +226,93 @@ const RECIPES = {
     }
     return files;
   },
+
+  /**
+   * Clermont: two no-login forms under /BOECandidateTool/Home, each a POST
+   * that answers with an .xlsx. BallotTracking (election + date range) is the
+   * VoterView-layout list of RETURNED ballots; AbsenteeMailingLabel (election,
+   * party, show-party, date range, district, format, procedure) with EXCEL +
+   * COUNTYWIDE + All is every ballot REQUESTED. Both into a folder for
+   * fetch-absentee-clermont.mjs --in=<folder>. Dates: 1 Jan this year to today.
+   */
+  async clermont(page) {
+    const today = new Date();
+    const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const start = iso(new Date(today.getFullYear(), 0, 1)), end = iso(today);
+    const files = [];
+    const MONTHS = ["JANUARY","FEBRUARY","MARCH","APRIL","MAY","JUNE","JULY","AUGUST","SEPTEMBER","OCTOBER","NOVEMBER","DECEMBER"];
+    /** The newest election in the page's <select> ("2026 November General" -> 2026-11). */
+    const newestElection = async () => {
+      const opts = await page.$$eval("select option", (os) => os.map((o) => ({ value: o.value, text: o.textContent.trim() })));
+      const dated = opts.map((o) => { const m = o.text.match(/^(\d{4})\s+([A-Za-z]+)/); const mo = m ? MONTHS.indexOf(m[2].toUpperCase()) : -1; return mo < 0 ? null : { ...o, key: Number(m[1]) * 100 + mo }; }).filter(Boolean);
+      if (!dated.length) throw new Error(`no dated election option on ${page.url()}: ${opts.map((o) => o.text).join(" | ")}`);
+      dated.sort((x, y) => y.key - x.key);
+      return dated[0];
+    };
+    /** Navigate to a report URL and catch the .xlsx it answers with. */
+    const getReport = async (label, url) => {
+      const [download] = await Promise.all([
+        page.waitForEvent("download", { timeout: 180_000 }),
+        page.evaluate((u) => { window.location.href = u; }, url),
+      ]);
+      const failure = await download.failure();
+      if (failure) throw new Error(`${label}: download failed: ${failure} (${url})`);
+      files.push({ name: download.suggestedFilename() || `${label}.xlsx`, buffer: readFileSync(await download.path()) });
+      say(`${label}: ${download.suggestedFilename()}`);
+    };
+
+    // The forms are plain GETs (seen in the address bar, 27 Oct 2026), so once
+    // the election id is read off the page the reports are fetched by URL.
+    await page.goto(`${site}/BOECandidateTool/Home/BallotTracking`, { waitUntil: "domcontentloaded", timeout: 90_000 });
+    await clearCloudflare(page);
+    const election = await newestElection();
+    say(`election: ${election.text} (${election.value})`);
+    await getReport("ballot-tracking", `${site}/BOECandidateTool/Home/GenerateBallotTracking?SelectedElection=${election.value}&SelectedStartDate=${start}&SelectedEndDate=${end}`);
+
+    // The mailing-label form: fill it through its own controls (by name,
+    // read off the page) and let the page submit, so the real action URL and
+    // parameter encoding come from the Board's code, not a guess. The form
+    // enables Generate Report only after its listeners see each change.
+    await page.goto(`${site}/BOECandidateTool/Home/AbsenteeMailingLabel`, { waitUntil: "domcontentloaded", timeout: 90_000 });
+    await clearCloudflare(page);
+    const fields = await page.$$eval("form select, form input", (els) => els.map((el) => ({ name: el.name, id: el.id, tag: el.tagName.toLowerCase(), type: el.type, options: el.tagName === "SELECT" ? [...el.options].map((o) => ({ value: o.value, text: o.textContent.trim() })) : null })));
+    const field = (re) => { const f = fields.find((x) => re.test(x.name) || re.test(x.id)); if (!f) throw new Error(`mailing-label form has no field matching ${re}; fields: ${fields.map((x) => x.name || x.id).join(", ")}`); return f; };
+    const setSelect = async (re, optRe) => {
+      const f = field(re);
+      const opt = f.options.find((o) => optRe.test(o.text));
+      if (!opt) throw new Error(`${f.name}: no option matching ${optRe}: ${f.options.map((o) => o.text).join(" | ")}`);
+      await page.selectOption(`[name="${f.name}"]`, opt.value);
+      await page.$eval(`[name="${f.name}"]`, (el) => { el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true })); });
+      say(`  ${f.name} = ${opt.text}`);
+    };
+    const setDate = async (re, value) => {
+      const f = field(re); const sel = `[name="${f.name}"]`;
+      await page.focus(sel);
+      if (f.type === "date") await page.fill(sel, value);
+      else { await page.fill(sel, ""); await page.type(sel, value.replace(/^(\d{4})-(\d{2})-(\d{2})$/, "$2/$3/$1"), { delay: 20 }); }
+      await page.$eval(sel, (el) => { el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true })); el.blur(); });
+    };
+    await setSelect(/election/i, new RegExp(election.text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+    await setSelect(/^(?!.*show).*party/i, /^ALL/i);
+    await setSelect(/show/i, /party and precinct/i);
+    await setDate(/start/i, start);
+    await setDate(/end/i, end);
+    await setSelect(/district/i, /countywide/i);
+    await setSelect(/format/i, /excel/i);
+    await setSelect(/procedure/i, /^all$/i);
+    const btn = "button[type='submit'], input[type='submit']";
+    try { await page.waitForFunction((b) => { const el = document.querySelector(b); return el && !el.disabled; }, btn, { timeout: 15_000 }); }
+    catch { await page.$eval(btn, (el) => { el.disabled = false; }); say("absentee-mailing: the page never enabled Generate Report - submitting anyway"); }
+    const [download] = await Promise.all([
+      page.waitForEvent("download", { timeout: 180_000 }),
+      page.click(btn),
+    ]);
+    const failure = await download.failure();
+    if (failure) throw new Error(`absentee-mailing: download failed: ${failure}`);
+    files.push({ name: download.suggestedFilename() || "absentee-mailing.xlsx", buffer: readFileSync(await download.path()) });
+    say(`absentee-mailing: ${download.suggestedFilename()}`);
+    return files;
+  },
 };
 
 /** The Board's candidate login, from the secrets file outside every repo (or the environment). */
