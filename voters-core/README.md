@@ -111,7 +111,11 @@ Playwright drives the machine's Chrome from the shared install under
 `%LOCALAPPDATA%\FleetTools\playwright`; the recipe fills the form and catches
 the download, the converter writes the platform-layout CSV. Recipes so far:
 `hamilton` (WordPress API behind Cloudflare), `cuyahoga` (full-page POST form,
-Oct 2026), `stark` (HTTP sign-in + Cloudflare, several files, Oct 2026).
+Oct 2026), `stark` (HTTP sign-in + Cloudflare, several files, Oct 2026),
+`tedvault` (TED Election Vault's Blazor "Absentee List" builder at
+`<site>/TEDElectionLink/ElectionVault/files` - Wood, voters-core 1.9.5; mail
+ballots only, the builder lists no in-person early voters; converter
+`fetch-absentee-tedvault.mjs`).
 
 ## stats.json
 

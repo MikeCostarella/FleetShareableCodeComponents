@@ -15,6 +15,7 @@
  *   node scripts/fetch-absentee-browser.mjs --recipe=hamilton --site=https://votehamiltoncountyohio.gov --out=<raw file path>
  *   node scripts/fetch-absentee-browser.mjs --recipe=hamilton ... --headed      (watch it, for debugging)
  *   node scripts/fetch-absentee-browser.mjs --recipe=cuyahoga --site=https://boe.cuyahogacounty.gov --out=<raw file path>
+ *   node scripts/fetch-absentee-browser.mjs --recipe=tedvault --site=https://votertools.woodcountyohio.gov --out=<raw file path>
  *   node scripts/fetch-absentee-browser.mjs --recipe=stark --site=https://builder1.revize.com --out=<raw folder path>
  *     (a recipe that returns several files - Stark's Returned + daily Mailed
  *     spreadsheets - saves them into --out as a folder; its converter takes --in=<that folder>)
@@ -312,6 +313,62 @@ const RECIPES = {
     files.push({ name: download.suggestedFilename() || "absentee-mailing.xlsx", buffer: readFileSync(await download.path()) });
     say(`absentee-mailing: ${download.suggestedFilename()}`);
     return files;
+  },
+  /**
+   * TED Election Vault (Wood, Oct 2026): <site>/TEDElectionLink/ElectionVault/files
+   * is a Blazor Server page (MudBlazor), so the CSV is built over the page's
+   * SignalR connection and handed to the browser as a download - there is no
+   * URL to request, hence a real browser. Done the way a person does it
+   * (recorded 28 Oct 2026): "Go to Absentee List", tick Issued + Printed +
+   * Returned in the Absentee Status list (Issued is ticked already), leave
+   * party and district blank (the whole county), Download CSV. The file is
+   * absentee-list-<yyyy-mm-dd>.csv; fetch-absentee-tedvault.mjs converts it.
+   *
+   * The page loads Google reCAPTCHA. The download asked for nothing in a
+   * person's browser on 28 Oct 2026; if a run is ever shown a challenge, this
+   * recipe stops and says so - it does not try to answer it. Ask the Board
+   * for another route then.
+   */
+  async tedvault(page) {
+    await page.goto(`${site}/TEDElectionLink/ElectionVault/files`, { waitUntil: "domcontentloaded", timeout: 90_000 });
+    const challenged = async () => (await page.$("iframe[src*='recaptcha'][src*='bframe']")) && (await page.isVisible("iframe[src*='recaptcha'][src*='bframe']"));
+    await page.click("button[aria-label='Go to Absentee List']", { timeout: 60_000 });
+    const status = page.locator(".mud-input-control", { hasText: "Absentee Status" }).first();
+    await status.waitFor({ timeout: 60_000 });
+    // The list opens from the control's end adornment; its options are rows
+    // of a checkbox and a <p> label inside the open popover.
+    await status.locator(".mud-input-adornment-end button").last().click();
+    const pop = page.locator(".mud-popover-open").last();
+    await pop.waitFor({ timeout: 15_000 });
+    const want = ["Issued", "Printed", "Returned"];
+    for (const label of want) {
+      const row = pop.locator("div.d-flex.align-center", { has: page.locator(`p:text-is("${label}")`) }).first();
+      const box = row.locator("input[type='checkbox']");
+      if (!(await box.count())) throw new Error(`tedvault: no "${label}" in the Absentee Status list - the page changed`);
+      if (!(await box.isChecked())) await row.locator(`p:text-is("${label}")`).click();   // the label toggles it (the input itself is transparent)
+    }
+    const ticked = await pop.evaluate((el) => [...el.querySelectorAll("input[type=checkbox]")].map((c) => ({
+      label: (c.closest("div.d-flex")?.querySelector("p")?.textContent || "").trim(), on: c.checked,
+    })).filter((c) => c.on && c.label !== "Select All").map((c) => c.label));
+    say(`absentee status: ${ticked.join(", ")}`);
+    if (want.some((w) => !ticked.includes(w))) throw new Error(`tedvault: could not tick ${want.filter((w) => !ticked.includes(w)).join(", ")}`);
+    await page.mouse.click(10, 400);   // close the list (Escape does not)
+    await pop.waitFor({ state: "hidden", timeout: 10_000 }).catch(() => {});
+    say("requesting the CSV");
+    let download;
+    try {
+      [download] = await Promise.all([
+        page.waitForEvent("download", { timeout: 180_000 }),
+        page.locator("button", { hasText: "Download CSV" }).first().click(),
+      ]);
+    } catch (e) {
+      if (await challenged()) throw new Error("tedvault: the page showed a reCAPTCHA challenge - not answered by design; ask the Board for another route");
+      throw e;
+    }
+    const failure = await download.failure();
+    if (failure) throw new Error(`tedvault: download failed: ${failure}`);
+    say(`download: ${download.suggestedFilename()}`);
+    return download;
   },
 };
 
