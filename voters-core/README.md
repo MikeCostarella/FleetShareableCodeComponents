@@ -113,7 +113,7 @@ the download, the converter writes the platform-layout CSV. Recipes so far:
 `hamilton` (WordPress API behind Cloudflare), `cuyahoga` (full-page POST form,
 Oct 2026), `stark` (HTTP sign-in + Cloudflare, several files, Oct 2026),
 `tedvault` (TED Election Vault's Blazor "Absentee List" builder at
-`<site>/TEDElectionLink/ElectionVault/files` - Wood, voters-core 1.9.5; mail
+`<site>/TEDElectionLink/ElectionVault/files` - Wood, voters-core 1.9.5, selectors fixed in 1.9.6; mail
 ballots only, the builder lists no in-person early voters; converter
 `fetch-absentee-tedvault.mjs`).
 

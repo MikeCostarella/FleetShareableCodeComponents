@@ -335,20 +335,33 @@ const RECIPES = {
     await page.click("button[aria-label='Go to Absentee List']", { timeout: 60_000 });
     const status = page.locator(".mud-input-control", { hasText: "Absentee Status" }).first();
     await status.waitFor({ timeout: 60_000 });
-    // The list opens from the control's end adornment; its options are rows
-    // of a checkbox and a <p> label inside the open popover.
-    await status.locator(".mud-input-adornment-end button").last().click();
-    const pop = page.locator(".mud-popover-open").last();
-    await pop.waitFor({ timeout: 15_000 });
+    // The list opens on a real click on the field's dropdown arrow (the end
+    // adornment - an icon, not a button; a script .click() does nothing).
+    // NOT the icon button just before it: that one clears the selection.
+    // Its options are rows of a checkbox and a <p> label in the open popover.
+    await status.locator(".mud-input-adornment-end").first().click();
+    // The popover opens empty and Blazor fills in the options a moment later
+    // (a server round trip), so wait for the last one before reading any.
+    // Each option is one .mud-list-item (recorded 28 Oct 2026):
+    //   div.mud-list-item > div.mud-list-item-text > p.mud-typography-body2 >
+    //     div.d-flex > [ div.mud-input-control > label.mud-checkbox > input.mud-checkbox-input ,
+    //                    div.d-flex > p.mud-typography-body1 "Issued" ]
+    const pop = page.locator(".mud-popover-open", { hasText: "Select All" }).last();
+    const optionLabel = (label) => `p.mud-typography-body1:text-is("${label}")`;
+    await pop.locator(optionLabel("Returned")).waitFor({ timeout: 30_000 });
     const want = ["Issued", "Printed", "Returned"];
     for (const label of want) {
-      const row = pop.locator("div.d-flex.align-center", { has: page.locator(`p:text-is("${label}")`) }).first();
-      const box = row.locator("input[type='checkbox']");
-      if (!(await box.count())) throw new Error(`tedvault: no "${label}" in the Absentee Status list - the page changed`);
-      if (!(await box.isChecked())) await row.locator(`p:text-is("${label}")`).click();   // the label toggles it (the input itself is transparent)
+      const row = pop.locator(".mud-list-item", { has: page.locator(optionLabel(label)) });
+      const box = row.locator("input.mud-checkbox-input");
+      if ((await box.count()) !== 1) throw new Error(`tedvault: no single "${label}" option in the Absentee Status list - the page changed`);
+      if (!(await box.isChecked())) {
+        await row.locator(optionLabel(label)).click();   // the label toggles it (the input itself is transparent)
+        // The tick comes back from the server; wait for it before the next one.
+        await row.locator("input.mud-checkbox-input:checked").waitFor({ state: "attached", timeout: 15_000 });
+      }
     }
     const ticked = await pop.evaluate((el) => [...el.querySelectorAll("input[type=checkbox]")].map((c) => ({
-      label: (c.closest("div.d-flex")?.querySelector("p")?.textContent || "").trim(), on: c.checked,
+      label: (c.closest(".mud-list-item")?.querySelector("p.mud-typography-body1")?.textContent || "").trim(), on: c.checked,
     })).filter((c) => c.on && c.label !== "Select All").map((c) => c.label));
     say(`absentee status: ${ticked.join(", ")}`);
     if (want.some((w) => !ticked.includes(w))) throw new Error(`tedvault: could not tick ${want.filter((w) => !ticked.includes(w)).join(", ")}`);
