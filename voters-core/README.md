@@ -113,7 +113,9 @@ downloads every one linked from the page and keeps one row per voter
 Hancock (voters-core 1.9.10) is the same kind: `fetch-absentee-hancock.mjs` downloads the Board's
 Google-Sheet exports - the cumulative returned list (every returned ballot, in office and by mail)
 and the vote-by-mail requests workbook (one sheet per day) - and maps the Board's SoS voter ids to
-county ids through the SoS file in SourceData, so it runs only on lvp-01:
+county ids through the SoS file in SourceData, so it runs only on lvp-01. The daily-lists table
+on the Board's page is loaded by script (Ninja Tables), so the fetcher reads its rows from the
+site's admin-ajax.php (1.9.11):
 
 ```json
 { "fetcher": "script", "script": "fetch-absentee-hancock.mjs",
