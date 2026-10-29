@@ -98,6 +98,18 @@ voter_id is the county id, so no name matching.
 
 The file is per-county and is not swept.
 
+A Board whose files plain HTTP can fetch but that need combining of their own
+gets a *script* fetcher that downloads and converts in one step. Ottawa posts
+one .xlsx per day of early voting, each holding that day's activity (ballots
+mailed, mail ballots returned, in-person votes); `fetch-absentee-ottawa.mjs`
+downloads every one linked from the page and keeps one row per voter
+(voters-core 1.9.7):
+
+```json
+{ "fetcher": "script", "script": "fetch-absentee-ottawa.mjs",
+  "pageUrl": "https://boe.ottawa.oh.gov/absentee-ballot-requests/" }
+```
+
 A Board whose page is a JavaScript form with nothing replayable behind it, or
 that sits behind a bot check (Hamilton), gets a *recipe* in
 `fetch-absentee-browser.mjs` plus its own converter:

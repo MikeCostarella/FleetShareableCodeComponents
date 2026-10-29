@@ -81,6 +81,8 @@ try {
   # lists are postbacks from its Public Records page (Butler, Franklin); or
   # { "fetcher": "hamilton", "siteUrl": "https://votehamiltoncountyohio.gov" }
   # { "fetcher": "browser", "recipe": "stark", "siteUrl": "https://builder1.revize.com", "convert": "fetch-absentee-stark.mjs" }
+  # { "fetcher": "script", "script": "fetch-absentee-ottawa.mjs", "pageUrl": "https://boe.ottawa.oh.gov/absentee-ballot-requests/" }
+  # for a Board whose files plain HTTP can fetch but need their own combining (Ottawa's daily lists);
   # for the Hamilton Board's export API (blocked by Cloudflare since Oct 2026 -
   # Hamilton now uses { "fetcher": "browser", "recipe": "hamilton", "siteUrl":
   # ..., "convert": "fetch-absentee-hamilton.mjs" }: fetch-absentee-browser.mjs
@@ -112,6 +114,14 @@ try {
       $fetchArgs = "`"--recipe=$($src.recipe)`" `"--site=$($src.siteUrl)`" `"--out=$raw`""
       $convert = Join-Path $App "scripts\$($src.convert)"
       $where = "the Board's site through a browser ($($src.recipe) recipe)"
+    }
+    if ($src.fetcher -eq 'script') {
+      # A Board-specific fetcher that downloads and converts in one step with
+      # plain HTTP (Ottawa's daily lists): { "fetcher": "script", "script":
+      # "fetch-absentee-ottawa.mjs", "pageUrl": "https://..." }
+      $fetch = Join-Path $App "scripts\$($src.script)"
+      $fetchArgs = "`"--page=$($src.pageUrl)`" `"--out=$tmp`""
+      $where = "the Board's site ($($src.script))"
     }
     if ($src.fetcher -eq 'electionvault') {
       $fetch = Join-Path $App 'scripts\fetch-absentee-electionvault.mjs'
