@@ -110,6 +110,16 @@ downloads every one linked from the page and keeps one row per voter
   "pageUrl": "https://boe.ottawa.oh.gov/absentee-ballot-requests/" }
 ```
 
+Hancock (voters-core 1.9.10) is the same kind: `fetch-absentee-hancock.mjs` downloads the Board's
+Google-Sheet exports - the cumulative returned list (every returned ballot, in office and by mail)
+and the vote-by-mail requests workbook (one sheet per day) - and maps the Board's SoS voter ids to
+county ids through the SoS file in SourceData, so it runs only on lvp-01:
+
+```json
+{ "fetcher": "script", "script": "fetch-absentee-hancock.mjs",
+  "pageUrl": "https://hancockcountyohioelections.gov/absentee-lists/" }
+```
+
 A Board whose page is a JavaScript form with nothing replayable behind it, or
 that sits behind a bot check (Hamilton), gets a *recipe* in
 `fetch-absentee-browser.mjs` plus its own converter:
