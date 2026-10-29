@@ -3,4 +3,6 @@
 # only the derived react-app/public/data/voters.json is committed.
 SourceData/SOS_*.txt
 # A Board's raw export kept beside the converted CSV while testing a converter
-SourceData/*raw*
+# (always named with a hyphen: cuyahoga-boe-raw.csv, Stark-mailed-raw-<date>.xlsx).
+# Not *raw* - that also matched "TuscaRAWas" and hid its absentee file (Oct 29 2026).
+SourceData/*-raw*
