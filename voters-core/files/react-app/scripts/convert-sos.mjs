@@ -266,7 +266,19 @@ if (args.file) {
     console.log(`${found.length} SoS files found; using the latest, ${source.file}`);
   }
 }
-const COUNTY_LABEL = args.county ?? `${source.county} County, Ohio`;
+// The county's own spelling from src/config/county.ts ("Van Wert"), not the
+// file name's ("SOS_VANWERT_..." -> "Vanwert"): the merge workflow and the
+// geocoder build sibling repo names from this label, and GitHub's runner is
+// case-sensitive (VanwertCountyParcels is not VanWertCountyParcels; Oct 29 2026).
+function configuredCounty() {
+  try {
+    const m = readFileSync(join(ROOT, "react-app", "src", "config", "county.ts"), "utf8").match(/COUNTY_NAME\s*=\s*"([^"]+)"/);
+    return m ? m[1] : null;
+  } catch {
+    return null;
+  }
+}
+const COUNTY_LABEL = args.county ?? `${configuredCounty() ?? source.county} County, Ohio`;
 
 console.log(`Reading ${source.file} (${COUNTY_LABEL}, downloaded ${source.date})`);
 // Pass 1: the header only. Pass 2 (below, once the column indexes and the
