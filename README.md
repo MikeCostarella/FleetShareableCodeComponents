@@ -6,6 +6,7 @@ live here:
 | Library | What it is | Vendored into |
 |---|---|---|
 | **parcels-core** | the shared parcels-map code: search, loading, geometry, deep links | every `*CountyParcels` app (88) |
+| **address-match** | street address → county address points / parcels / voter roll → point, parcel, precinct (build-script matcher, lifted from voters-core) | OhioLiquorPermits |
 | **address-lookup** | Ohio street address → Census geocoder → that county's parcels app | OhioCounties hub, OhioFleetAddressParcelSearchBrowserExtension |
 | **basemaps** | the base map switcher: Streets (CARTO) / Aerial (Ohio OSIP imagery) / Aerial + labels | every Leaflet map app (parcels, county specials, topic maps) |
 | **a11y** | WCAG 2.1 AA kit: keyboard list rows + sort headers, live result count, skip link, dialog focus handling, menu arrow keys, `?view=list`, pulse limits | opt-in: every map app as it is fixed (pilots: TrumbullHealthAccessMap, TrumbullCountyHydrants) |
