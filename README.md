@@ -1,6 +1,6 @@
 # FleetShareableCodeComponents
 
-The source of truth for code shared across the Statehouse fleet. Six libraries
+The source of truth for code shared across the Statehouse fleet. Seven libraries
 live here:
 
 | Library | What it is | Vendored into |
@@ -11,6 +11,7 @@ live here:
 | **basemaps** | the base map switcher: Streets (CARTO) / Aerial (Ohio OSIP imagery) / Aerial + labels | every Leaflet map app (parcels, county specials, topic maps) |
 | **a11y** | WCAG 2.1 AA kit: keyboard list rows + sort headers, live result count, skip link, dialog focus handling, menu arrow keys, `?view=list`, pulse limits | opt-in: every map app as it is fixed (pilots: TrumbullHealthAccessMap, TrumbullCountyHydrants) |
 | **voters-core** | the whole `<County>CountyVoters` app (scripts, UI, workflow) as templates with the county's names as placeholders; rendered, not copied. `new-county-voters.py` scaffolds a county from it | every `*CountyVoters` app (3 of 88, Oct 2026) |
+| **help** | the help drawer: topics registered as data (id, group, title, JSX body, keywords, see-also), search, contents, contextual "?" buttons, the ? key; non-modal, focus-managed | opt-in: OhioLiquorPermits (pilot, Nov 2026) |
 | **scheduled-jobs** | every scheduled GitHub Actions job across a set of repos: plain-words schedule, next run, last result, warnings, enable / disable / run now. Two halves: `src/` (server) and `ui/` (React panel) | StatehouseUI, CSCI5802Fall2026Management, CSCI5802Fall2026Student |
 
 Until 27 September 2026 the master copy of parcels-core was whatever sat in
@@ -38,6 +39,10 @@ a11y/
   src/       -> copied to <app>/react-app/src/vendor/a11y/                    (VERSION 1.0.0)
                opt-in: any manifest repo with that folder is a sync target
   test/      -> its suite (pure logic in src/a11y.ts; no DOM needed)
+help/
+  src/       -> copied to <app>/react-app/src/vendor/help/                    (VERSION 1.0.0)
+               opt-in: any manifest repo with that folder is a sync target
+  test/      -> its suite (pure search / grouping logic in src/help.ts)
 scheduled-jobs/
   src/       -> copied to <app>/server/vendor/scheduled-jobs/                 (VERSION 1.0.0)
   ui/        -> copied to <app>/react-app/src/vendor/scheduled-jobs/          (VERSION 1.0.0)
