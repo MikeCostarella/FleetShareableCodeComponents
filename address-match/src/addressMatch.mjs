@@ -433,9 +433,10 @@ export function buildIndex({ addressPoints = null, parcels = null, voters = null
 
   for (const p of addressPoints ?? []) {
     if (p.y == null || p.x == null) continue;
-    const point = [p.y, p.x, null];
-    const { number, rest } = splitAddress(p.a);
     const city = String(p.c ?? "").toUpperCase().trim();
+    // Where the point says it is, for the "same address in another town" check in matchAddress.
+    const point = [p.y, p.x, p.j || city ? { jurisdiction: p.j ?? null, city } : null];
+    const { number, rest } = splitAddress(p.a);
     const zip = String(p.z ?? "");
     const full = rest.join(" ");
     const quad = withoutQuadrant(rest).join(" ");
@@ -498,7 +499,7 @@ export function buildIndex({ addressPoints = null, parcels = null, voters = null
         const zip = String(vzips[v[F.zip]] ?? v[F.zip] ?? "");
         const city = String(vcities[v[F.city]] ?? v[F.city] ?? "").toUpperCase().trim();
         const precinct = vprec[v[F.precinct]] ?? (typeof v[F.precinct] === "string" ? v[F.precinct] : null);
-        const point = [lat, lon, { precinct: precinct ?? null }];
+        const point = [lat, lon, { precinct: precinct ?? null, city }];
         const coreStr = coreName(rest).join(" ");
         for (const geo of [city, zip]) push(ix.vrCore, `${number}|${coreStr}|${geo}`, point);
         push(ix.vrAnywhere, `${number}|${coreStr}`, point);
@@ -560,8 +561,6 @@ export function matchAddress(ix, { street, city = "", zip = "", muni = "" }) {
     }
     if (hit) break;
   }
-  // 4: the address point exists under another city/ZIP.
-  if (!hit) { const h = lookup(ix.apAnywhere, `${number}|${coreStr}`); if (h) { hit = h; tier = TIER.ADDRESS_ELSEWHERE; } }
   // A parcel found only by number and street, anywhere in the county, is
   // taken when it lies in the place the address names. "600 N HIGH ST,
   // COLUMBUS" must not land on 600 N High St in Worthington because the
@@ -569,9 +568,20 @@ export function matchAddress(ix, { street, city = "", zip = "", muni = "" }) {
   // unknown, or not a place name (a tax-district label), is still trusted.
   const elsewhere = (pts) => {
     if (!pts || !places.length) return false;
-    const known = pts.map((pt) => pt[2]?.jurisdiction).filter((j) => j && !/^\s*unassigned\s*$/i.test(j) && !/\b(CORP|CP|CSD|LSD|ILSD|EVSD|JVSD|SD)\b/.test(j));
-    return known.length > 0 && known.every((j) => !places.includes(placeKey(j)));
+    const placeLike = (j) => j && !/^\s*unassigned\s*$/i.test(j) && !/\b(CORP|CP|CSD|LSD|ILSD|EVSD|JVSD|SD)\b/.test(j);
+    let known = 0;
+    for (const pt of pts) {
+      const names = [pt[2]?.jurisdiction, pt[2]?.city].filter(placeLike);
+      if (!names.length) continue;
+      known++;
+      if (names.some((n) => places.includes(placeKey(n)))) return false;
+    }
+    return known > 0;
   };
+  // 4: the address point exists under another city/ZIP — but not when it is
+  // plainly another place ("2304 NILES CORTLAND RD SE", Howland, must not take
+  // 2304 Niles Cortland Rd NE in Bazetta because the SE point is missing).
+  if (!hit && !elsewhere(ix.apAnywhere.get(`${number}|${coreStr}`))) { const h = lookup(ix.apAnywhere, `${number}|${coreStr}`); if (h) { hit = h; tier = TIER.ADDRESS_ELSEWHERE; } }
   // ...except as a last resort when that parcel is in a township: a city
   // address whose parcel the roll files under the surrounding township (or
   // the reverse, after an annexation) is the same spot, not another town.
@@ -625,8 +635,10 @@ export function matchAddress(ix, { street, city = "", zip = "", muni = "" }) {
   if (!hit) {
     let h = null;
     for (const geo of [city, zip, ...places]) { if (geo) h = h ?? lookup(ix.vrCore, `${number}|${coreStr}|${geo}`); }
-    h = h ?? lookup(ix.vrAnywhere, `${number}|${coreStr}`) ??
-      (noLeadStr && lookup(ix.vrAnywhere, `${number}|${noLeadStr}`));
+    // A voter at that number on the street, anywhere in the county — unless every one lives in another town.
+    const voterAnywhere = (key) => (elsewhere(ix.vrAnywhere.get(key)) ? null : lookup(ix.vrAnywhere, key));
+    h = h ?? voterAnywhere(`${number}|${coreStr}`) ??
+      (noLeadStr && voterAnywhere(`${number}|${noLeadStr}`));
     if (h) { hit = h; tier = TIER.VOTER; }
   }
   // 8: nearest known number on the same street — same ZIP (or city), within

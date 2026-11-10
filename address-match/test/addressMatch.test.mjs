@@ -95,4 +95,17 @@ assert.equal(placeKey("Shaker Hgts"), placeKey("Shaker Heights")); assert.equal(
   r = matchAddress(c, { street: "77 TAX RD", city: "WASHINGTON C H", zip: "43161", muni: "Washington Court House" });
   assert.equal(r.parcelId, "T");
 }
+{
+  // An address point for the same number on the NE half of the road is not the SE address.
+  const a = buildIndex({ addressPoints: [
+    { a: "2304 NILES CORTLAND RD NE", c: "CORTLAND", z: "44410", j: "Bazetta Township", y: 41.28, x: -80.7389 },
+    { a: "2295 NILES CORTLAND RD SE", c: "WARREN", z: "44484", j: "Howland Township", y: 41.2118, x: -80.7401 },
+    { a: "2319 NILES CORTLAND RD SE", c: "WARREN", z: "44484", j: "Howland Township", y: 41.2116, x: -80.7402 },
+  ] });
+  const r = matchAddress(a, { street: "2304 NILES CORTLAND RD SE", city: "WARREN", zip: "44484", muni: "Howland Twp" });
+  assert.equal(r.tier, TIER.STREET); assert.ok(Math.abs(r.lat - 41.2117) < 0.001);
+  // ...while a point filed under a neighbouring post office in the same township still counts.
+  const b = buildIndex({ addressPoints: [{ a: "100 ELM RD NE", c: "CORTLAND", z: "44410", j: "Howland Township", y: 41.25, x: -80.74 }] });
+  assert.equal(matchAddress(b, { street: "100 ELM RD", city: "WARREN", zip: "44484", muni: "Howland Twp" }).tier, TIER.ADDRESS_ELSEWHERE);
+}
 console.log("address-match: all tests passed");
