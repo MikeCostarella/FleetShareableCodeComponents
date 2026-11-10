@@ -562,13 +562,33 @@ export function matchAddress(ix, { street, city = "", zip = "", muni = "" }) {
   }
   // 4: the address point exists under another city/ZIP.
   if (!hit) { const h = lookup(ix.apAnywhere, `${number}|${coreStr}`); if (h) { hit = h; tier = TIER.ADDRESS_ELSEWHERE; } }
+  // A parcel found only by number and street, anywhere in the county, is
+  // taken when it lies in the place the address names. "600 N HIGH ST,
+  // COLUMBUS" must not land on 600 N High St in Worthington because the
+  // Columbus parcel is missing from the roll. A parcel whose jurisdiction is
+  // unknown, or not a place name (a tax-district label), is still trusted.
+  const elsewhere = (pts) => {
+    if (!pts || !places.length) return false;
+    const known = pts.map((pt) => pt[2]?.jurisdiction).filter((j) => j && !/^\s*unassigned\s*$/i.test(j) && !/\b(CORP|CP|CSD|LSD|ILSD|EVSD|JVSD|SD)\b/.test(j));
+    return known.length > 0 && known.every((j) => !places.includes(placeKey(j)));
+  };
+  // ...except as a last resort when that parcel is in a township: a city
+  // address whose parcel the roll files under the surrounding township (or
+  // the reverse, after an annexation) is the same spot, not another town.
+  let lastResort = null;
+  const anywhere = (key) => {
+    const pts = ix.pcAnywhere.get(key);
+    if (!elsewhere(pts)) return lookup(ix.pcAnywhere, key);
+    if (!lastResort && pts.some((pt) => /\b(TOWNSHIP|TWP)\s*$/i.test(pt[2]?.jurisdiction ?? ""))) lastResort = lookup(ix.pcAnywhere, key);
+    return null;
+  };
   // 5: the parcel roll (gives the parcel number).
   if (!hit) {
     const inPlace = (form) => { for (const g of places) { const x = lookup(ix.pcCore, `${number}|${form}|${g}`); if (x) return x; } return null; };
     const h = (ledStr ? lookup(ix.pcCore, `${number}|${ledStr}|${zip}`) ?? inPlace(ledStr) : null) ??
       lookup(ix.pcCore, `${number}|${coreStr}|${zip}`) ?? inPlace(coreStr) ??
-      lookup(ix.pcAnywhere, `${number}|${coreStr}`) ??
-      (noLeadStr && (lookup(ix.pcCore, `${number}|${noLeadStr}|${zip}`) ?? inPlace(noLeadStr) ?? lookup(ix.pcAnywhere, `${number}|${noLeadStr}`)));
+      anywhere(`${number}|${coreStr}`) ??
+      (noLeadStr && (lookup(ix.pcCore, `${number}|${noLeadStr}|${zip}`) ?? inPlace(noLeadStr) ?? anywhere(`${number}|${noLeadStr}`)));
     if (h) { hit = h; tier = TIER.PARCEL; }
   }
   // 5b: the file left the directional off ("430 SUPERIOR ST" for 430 N
@@ -595,6 +615,7 @@ export function matchAddress(ix, { street, city = "", zip = "", muni = "" }) {
         if (!cands) continue;
         let pts = prefixMatches(cands, core, oneStreet);
         if (!samePlace(pts) && noLead) pts = prefixMatches(cands, noLead, oneStreet);
+        if (oneStreet && byNumberZip === ix.pcByNumberZip && elsewhere(pts)) continue;
         if (samePlace(pts)) { hit = centroid(pts); tier = TIER.PREFIX; break; }
       }
       if (hit) break;
@@ -642,6 +663,7 @@ export function matchAddress(ix, { street, city = "", zip = "", muni = "" }) {
       if (hit) break;
     }
   }
+  if (!hit && lastResort) { hit = lastResort; tier = TIER.PARCEL; }
   if (!hit) return none;
 
   // Even when the point came from parcels/address points, the voter roll can

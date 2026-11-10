@@ -81,4 +81,18 @@ assert.equal(placeKey("Shaker Hgts"), placeKey("Shaker Heights")); assert.equal(
   r = matchAddress(h, { street: "3920 W 117TH ST", city: "CLEVELAND", zip: "44111" });
   assert.equal(r.parcelId, "C");
 }
+{
+  // The only "600 N HIGH ST" on the roll is in another town and ZIP: not taken as the parcel.
+  const c = buildIndex({ parcels: [
+    { n: "W", f: "600 N HIGH ST", z: "43085", y: 40.085, x: -83.017, j: "Worthington" },
+    { n: "C1", f: "590 N HIGH ST", z: "43215", y: 39.972, x: -83.003, j: "Columbus" },
+    { n: "T", f: "77 TAX RD", z: "43160", y: 39.5, x: -83.4, j: "WASHINGTON CORP-WAS C H CSD" },
+  ] });
+  let r = matchAddress(c, { street: "600 N HIGH ST", city: "COLUMBUS", zip: "43215", muni: "Columbus" });
+  assert.equal(r.tier, TIER.STREET); assert.ok(Math.abs(r.lat - 39.972) < 1e-6);
+  r = matchAddress(c, { street: "600 N HIGH ST", city: "WORTHINGTON", zip: "43214", muni: "Worthington" });
+  assert.equal(r.parcelId, "W");
+  r = matchAddress(c, { street: "77 TAX RD", city: "WASHINGTON C H", zip: "43161", muni: "Washington Court House" });
+  assert.equal(r.parcelId, "T");
+}
 console.log("address-match: all tests passed");
