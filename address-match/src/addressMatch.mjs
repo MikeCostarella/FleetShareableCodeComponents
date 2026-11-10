@@ -66,7 +66,7 @@ const STREET_TYPES = {
   // NAME far more often than a type ("438 N PARK AVE"), so it stays a word.
   BL: "BLVD", WY: "WAY", CR: "CIR", LP: "LOOP", PW: "PKWY", PI: "PIKE", TE: "TER",
   // Montgomery's auditor spells out what others abbreviate.
-  BRIDGE: "BRG", SAINT: "ST",
+  BRIDGE: "BRG", SAINT: "ST", CROSSING: "XING",
 };
 const TYPE_SUFFIXES = new Set([
   "RD", "ST", "AVE", "DR", "LN", "CT", "BLVD", "CIR", "PL", "TER", "TRL",
@@ -75,7 +75,17 @@ const TYPE_SUFFIXES = new Set([
 // Longest alternatives first so "ST RTE" isn't eaten by the "ST RT" branch.
 const ROUTE_RE =
   /\b(?:STATE\s+ROUTE|STATE\s+RTE|STATE\s+RT|ST\s+ROUTE|ST\s+RTE|ST\s+RT|ROUTE|RTE|RT)\b/g;
-const UNIT_RE = /\b(?:APT|UNIT|STE|SUITE|LOT|TRLR|RM|FL|FLOOR|BLDG)\b.*$/;
+const UNIT_RE = /\b(?:APTS?|UNITS?|STES?|SUITES?|LOTS?|TRLR|RM|FLS?|FLOORS?|BLDGS?|REAR|BSMT|BASEMENT|PATIO|BOX\s+\d+|RR\s?\d+)\b.*$/;
+// "932 HURON ST 1ST FL", "307 SYCAMORE ST, 2ND FLOOR": the ordinal goes with the floor.
+const FLOOR_RE = /,?\s*\b(?:\d+(?:ST|ND|RD|TH)|FIRST|SECOND|THIRD)(?:\s*(?:&|AND)\s*\d+(?:ST|ND|RD|TH))?\s+(?:FLS?|FLOORS?)\b.*$/;
+// Numbered streets: one roll writes "W 117TH ST", another "W 117 ST", a third "FOURTH ST".
+const ORDINAL_WORDS = {
+  FIRST: "1", SECOND: "2", THIRD: "3", FOURTH: "4", FIFTH: "5", SIXTH: "6", SEVENTH: "7", EIGHTH: "8",
+  NINTH: "9", TENTH: "10", ELEVENTH: "11", TWELFTH: "12", THIRTEENTH: "13", FOURTEENTH: "14",
+  FIFTEENTH: "15", SIXTEENTH: "16", SEVENTEENTH: "17", EIGHTEENTH: "18", NINETEENTH: "19", TWENTIETH: "20",
+};
+// Words spelled two ways inside street names (not street types).
+const NAME_WORDS = { CENTER: "CTR", CENTRE: "CTR", PLAZA: "PLZ", HEIGHTS: "HTS", HGTS: "HTS", MOUNT: "MT" };
 
 /** Upper-case token list with units, routes, directionals and types normalised. */
 export function tokenize(street) {
@@ -84,7 +94,20 @@ export function tokenize(street) {
   s = s.replace(/,\s*[A-Z]{2}\s*$/, "");
   // ...and annotate state routes in parentheses: "3703 LAKE (SR 531) RD".
   s = s.replace(/\([^)]*\)/g, " ");
-  s = s.replace(/#.*$/, "").replace(UNIT_RE, "");
+  s = s.replace(/#.*$/, "").replace(FLOOR_RE, "").replace(UNIT_RE, "");
+  // The house number: "09891" -> "9891"; "1050 1/2" and "610 1 2" (a half
+  // address) -> the whole number; "18334-B" / "530C" / "590 D" (a unit letter,
+  // but never a lone N/S/E/W, which is the street's directional) -> the number.
+  // "CR 25-A" -> "CR 25A" (and "18334-B BAGLEY" -> "18334B", stripped below).
+  s = s.replace(/\b(\d+)\s*-\s*([A-Z])\b(?!\s*-)/g, "$1$2");
+  s = s.replace(/^\s*0+(?=\d)/, "")
+    .replace(/^\s*(\d+)\s+1\s*[\/ ]\s*2\s+(?=\S)/, "$1 ")
+    .replace(/^\s*(\d+)\s*-\s*[A-Z]\s+(?!(?:ST|STREET|AVE|AVENUE)\b)(?=\S)/, "$1 ")
+    .replace(/^\s*(\d+)[A-Z]\s+(?=\S)/, "$1 ")
+    .replace(/^\s*(\d+)\s+[A-DF-MO-RT-VX-Z]\s+(?!(?:ST|STREET|AVE|AVENUE|RD|ROAD|DR|DRIVE|CT|LN|PL|BLVD|WAY|[A-Z]\s+(?:RD|ROAD|ST|AVE)|[A-Z]\s*$|AND)\b)(?![&])(?=\S)/, "$1 ");
+  // Routes written without a space or with a hyphen: "SR598", "US22", "OH-14", "CR16", "TR 5".
+  s = s.replace(/\b(SR|US|USR|OH|CR|TR)\s*-?\s*(\d{1,4}[A-Z]?)\b/g, (_, k, n) => `${k === "OH" || k === "USR" ? "SR" : k} ${n.replace(/^(\d+)([NSEW])$/, "$1 $2")}`);
+  s = s.replace(/\bU\.?\s?S\.?\s+(?:HIGHWAY|HWY|ROUTE|RTE|RT)\s+(?=\d)/g, "SR ").replace(/\bS\.\s?R\.\s*(?=\d)/g, "SR ");
   s = s.replace(ROUTE_RE, "SR");
   // A US route is "US RT 42" on one file and "RT 42 ST" on another; Ohio never
   // gives a state route a US route's number, so both are "SR 42".
@@ -98,11 +121,34 @@ export function tokenize(street) {
     .replace(/\b(?:TWP|TOWNSHIP)\s+(\d+[A-Z]?)\s+(?:RD|ROAD)\b/g, "TWP RD $1")
     .replace(/\b(?:TR|TWP)\s+(\d+[A-Z]?)\b/g, "TWP RD $1");
   s = s.replace(/[^A-Z0-9 ]/g, " ");
-  return s
+  const toks = s
     .split(/\s+/)
     .filter(Boolean)
     .map((t) => DIRECTIONAL_WORDS[t] ?? t)
-    .map((t) => STREET_TYPES[t] ?? t);
+    .map((t) => STREET_TYPES[t] ?? NAME_WORDS[t] ?? t)
+    // "117TH" / "FOURTH" -> "117" / "4", except as the first token (a
+    // numberless "5TH ST" must not turn into house number 5).
+    .map((t, i) => (i === 0 ? t : ORDINAL_WORDS[t] ?? t.replace(/^(\d+)(?:ST|ND|RD|TH)$/, "$1")))
+    // "HILLS & DALES RD" on one file, "HILLS AND DALES RD" on another.
+    .filter((t, i, a) => !(t === "AND" && i > 1 && i < a.length - 1));
+  // Lawrence's auditor: "NO 3RD ST" / "SO 3RD ST".
+  for (let i = 0; i < toks.length - 1; i++) if (toks[i] === "NO" || toks[i] === "SO") toks[i] = toks[i][0];
+  // A trailing PK is a pike ("WOOSTER PK", "OLD TROY PK N"); elsewhere PARK stays a word.
+  let last = toks.length - 1;
+  while (last > 1 && DIRECTIONALS.has(toks[last])) last--;
+  if (last > 1 && toks[last] === "PK") toks[last] = "PIKE";
+  return toks;
+}
+
+/** A city, village or township name reduced to what two files agree on: "Liberty Twp" = "LIBERTY TOWNSHIP" = "LIBERTY". */
+export function placeKey(name) {
+  return String(name ?? "").toUpperCase()
+    .replace(/\b(?:THE\s+)?(?:CITY|VILLAGE)\s+OF\b/g, " ")
+    .replace(/[^A-Z0-9 ]/g, " ")
+    .replace(/\b(?:HEIGHTS|HGTS)\b/g, "HTS").replace(/\bMOUNT\b/g, "MT").replace(/\bSAINT\b/g, "ST")
+    .replace(/\s+OH(?:IO)?\s*$/, "")
+    .replace(/\s+(?:TOWNSHIP|TWP|CITY|VILLAGE)\s*$/, "")
+    .replace(/\s+/g, " ").trim();
 }
 
 /** ["3910","E","RIVER","RD","SW"] -> { number: "3910", rest: [...] } */
@@ -119,15 +165,45 @@ export function splitAddress(street) {
  * the street each goes with, first form first, so a caller can try each.
  */
 export function splitCompound(street) {
-  const s = String(street ?? "").toUpperCase().trim();
+  const whole = String(street ?? "").toUpperCase().trim();
   const out = [];
   const seen = new Set();
   const add = (addr) => {
     const a = addr.replace(/\s+/g, " ").trim();
     if (a && !seen.has(a)) { seen.add(a); out.push(a); }
   };
-  // "A & B" / "A AND B" where B is a full address → both.
-  const amp = s.split(/\s+(?:&|AND)\s+/);
+  // DOLC writes a second line for a place name, an AKA or a patio:
+  // "KENWOOD TOWNE CENTRE\n7801 MONTGOMERY RD", "12700 TWP RD 477\nAKA 9090
+  // VETERANS WAY". Each line is tried; one that leads with a name but has the
+  // address after a comma ("ARTS CENTER ANNEX, 6620 MONTGOMERY RD") gives that part.
+  const lines = [];
+  for (let ln of whole.split(/[\r\n]+/)) {
+    ln = ln.replace(/^\s*(?:AKA|&|AND)\s+/, "").trim();
+    if (!ln) continue;
+    if (!/^\d/.test(ln)) ln = ln.split(/,\s*/).find((seg) => /^\d+\s+\S/.test(seg)) ?? ln;
+    lines.push(ln);
+  }
+  for (const s of lines.length ? lines : [whole]) {
+  // "5676-78-80 MAYBERRY SQ", "8097-8101-05 MAIN ST", "1291 1295 GRANDVIEW AVE": a run of numbers.
+  const run = s.match(/^(\d+)((?:\s*[-,&]\s*\d+){2,}|\s+\d{3,}(?=\s+[A-Z]))\s+(.+)$/);
+  if (run && !/^\d+(?:ST|ND|RD|TH)\b/.test(run[3]) && (run[2].trim().length === run[1].length || /[-,&]/.test(run[2]))) {
+    add(`${run[1]} ${run[3]}`);
+    for (let n of run[2].match(/\d+/g).slice(0, 4)) {
+      if (n.length < run[1].length) n = run[1].slice(0, run[1].length - n.length) + n; // 5676-78 → 5678
+      add(`${n} ${run[3]}`);
+    }
+    continue;
+  }
+  // "A & B" / "A AND B" where B is a full address or another number → both.
+  // ("46638 Y & O RD", "4715 HILLS & DALES RD": the & belongs to the street name.)
+  // An & after a complete street ("2092 WOODVILLE RD & PATIOS") starts an add-on, dropped here.
+  const addOn = s.match(/^(\d+\s+.*?\S)\s+(?:&|AND)\s+(?!\d)/);
+  let body = s;
+  if (addOn) {
+    const left = withoutQuadrant(tokenize(addOn[1]));
+    if (left.length > 2 && TYPE_SUFFIXES.has(left[left.length - 1])) body = addOn[1];
+  }
+  const amp = body.split(/\s+(?:&|AND)\s+(?=\d)/);
   for (let part of amp) {
     // "1810-12 N 4TH ST" → 1810 and 1812; "103-05 W LIBERTY" → 103 and 105.
     const m = part.match(/^(\d+)\s*-\s*(\d+)\s+(.+)$/);
@@ -141,13 +217,15 @@ export function splitCompound(street) {
     }
     // "B" with no street of its own ("1088 & 1100 N HIGH ST" → "1100 N HIGH ST" is the
     // second part; the first is just "1088"): borrow the street from the other part.
-    if (/^\d+$/.test(part) && amp.length > 1) {
-      const other = amp.find((p) => /^\d+\s+\S/.test(p));
+    if (/^\d+(?:\s+1\s*[\/ ]\s*2)?$/.test(part) && amp.length > 1) {
+      part = part.match(/^\d+/)[0];
+      const other = amp.find((p) => /^\d+\s+\S/.test(p) && !/^\d+\s+1\s*[\/ ]\s*2$/.test(p));
       if (other) { add(`${part} ${other.replace(/^\d+\s+/, "")}`); continue; }
     }
     add(part);
   }
-  return out.length ? out : [s];
+  }
+  return out.length ? out : [whole];
 }
 
 /** Street name with any trailing directionals removed. */
@@ -167,9 +245,13 @@ export function trailingDirectional(rest) {
 
 /** Street name with the trailing directionals AND the type suffix removed. */
 export function coreName(rest) {
+  // A street whose whole name is a directional or a type ("2154 SOUTH AVE",
+  // "1824 PARKWAY AVE") keeps that one word.
   const r = withoutQuadrant(rest);
-  if (r.length && TYPE_SUFFIXES.has(r[r.length - 1])) r.pop();
-  while (r.length && DIRECTIONALS.has(r[r.length - 1])) r.pop();
+  if (r.length === 0) return rest.slice(0, 1);
+  if (r.length > 1 && TYPE_SUFFIXES.has(r[r.length - 1])) r.pop();
+  // "HIGH N ST" -> HIGH, but "E NORTH ST" keeps its name: -> E N.
+  while (r.length > 1 && DIRECTIONALS.has(r[r.length - 1]) && !DIRECTIONALS.has(r[r.length - 2])) r.pop();
   return r;
 }
 
@@ -182,8 +264,8 @@ export function coreWithoutLead(core) {
 // A candidate is [lat, lon, meta]; meta is whatever the source attached
 // (parcel number, precinct) and is carried through to the result.
 
-/** True when every candidate sits within TIGHT_DEG of the others. */
-export function samePlace(points) {
+/** True when every candidate sits within TIGHT_DEG (or `within`) of the others. */
+export function samePlace(points, within = TIGHT_DEG) {
   if (!points || points.length === 0) return false;
   if (points.length === 1) return true;
   let latMin = Infinity, latMax = -Infinity, lonMin = Infinity, lonMax = -Infinity;
@@ -193,7 +275,7 @@ export function samePlace(points) {
     if (lon < lonMin) lonMin = lon;
     if (lon > lonMax) lonMax = lon;
   }
-  return Math.max(latMax - latMin, lonMax - lonMin) < TIGHT_DEG;
+  return Math.max(latMax - latMin, lonMax - lonMin) < within;
 }
 
 /** Mean of a candidate set (already known to be in one place) plus the meta they agree on. */
@@ -228,6 +310,9 @@ export function prefixMatches(candidates, wanted, oneStreet = false) {
   const names = new Set();
   for (const [name, point] of candidates) {
     if (name.length === 0) continue;
+    // A name that is only a directional ("EAST ST" -> ["E"]) is a prefix of
+    // every "E ..." street; it can only match itself.
+    if ((name.length === 1 && DIRECTIONALS.has(name[0])) !== (wanted.length === 1 && DIRECTIONALS.has(wanted[0]))) continue;
     const [short, long] = name.length <= wanted.length ? [name, wanted] : [wanted, name];
     let ok = true;
     for (let i = 0; i < short.length; i++) {
@@ -342,8 +427,8 @@ export function buildIndex({ addressPoints = null, parcels = null, voters = null
     byStreet: new Map(),
     counts: { addressPoints: 0, parcels: 0, voters: 0 },
   };
-  const indexStreet = (coreStr, geos, number, point) => {
-    for (const geo of geos) if (geo) push(ix.byStreet, `${coreStr}|${geo}`, [Number(number), point]);
+  const indexStreet = (coreStr, geos, number, point, dir = null) => {
+    for (const geo of geos) if (geo) push(ix.byStreet, `${coreStr}|${geo}`, [Number(number), point, dir]);
   };
 
   for (const p of addressPoints ?? []) {
@@ -363,7 +448,7 @@ export function buildIndex({ addressPoints = null, parcels = null, voters = null
     }
     push(ix.apAnywhere, `${number}|${coreStr}`, point);
     push(ix.apByNumberZip, `${number}|${zip}`, [core, point]);
-    if (number) indexStreet(coreStr, [zip, city], number, point);
+    if (number) indexStreet(coreStr, new Set([zip, city, placeKey(city)]), number, point, trailingDirectional(rest));
     ix.counts.addressPoints++;
   }
 
@@ -377,11 +462,16 @@ export function buildIndex({ addressPoints = null, parcels = null, voters = null
       const zip = zipFromAddress || String(p.z ?? "").slice(0, 5);
       const core = coreName(rest);
       const coreStr = core.join(" ");
+      // The parcel's own jurisdiction is a second geography: some rolls
+      // (Hamilton) carry no ZIP at all, and a permit's ZIP is often the
+      // neighbouring post office's.
+      const place = placeKey(p.j);
       push(ix.pcCore, `${number}|${coreStr}|${zip}`, point);
+      if (place) push(ix.pcCore, `${number}|${coreStr}|${place}`, point);
       push(ix.pcAnywhere, `${number}|${coreStr}`, point);
       push(ix.pcByNumberZip, `${number}|${zip}`, [core, point]);
-      indexStreet(coreStr, [zip], number, point);
       const lead = trailingDirectional(rest);
+      indexStreet(coreStr, new Set([zip, place]), number, point, lead);
       if (lead && !DIRECTIONALS.has(core[0])) {
         const led = [lead, ...core];
         const ledStr = led.join(" ");
@@ -412,7 +502,7 @@ export function buildIndex({ addressPoints = null, parcels = null, voters = null
         const coreStr = coreName(rest).join(" ");
         for (const geo of [city, zip]) push(ix.vrCore, `${number}|${coreStr}|${geo}`, point);
         push(ix.vrAnywhere, `${number}|${coreStr}`, point);
-        indexStreet(coreStr, [zip, city], number, point);
+        indexStreet(coreStr, new Set([zip, city, placeKey(city)]), number, point, trailingDirectional(rest));
         ix.counts.voters++;
       }
     }
@@ -431,16 +521,22 @@ function lookup(map, key) {
  *   { tier, lat, lon, parcelId, jurisdiction, precinct, candidates }
  * with tier TIER.NONE and nulls when nothing fits.
  */
-export function matchAddress(ix, { street, city = "", zip = "" }) {
+export function matchAddress(ix, { street, city = "", zip = "", muni = "" }) {
   const none = { tier: TIER.NONE, lat: null, lon: null, parcelId: null, jurisdiction: null, precinct: null, candidates: 0 };
   const { number, rest } = splitAddress(street);
   if (!number) return none;
   city = String(city ?? "").toUpperCase().replace(/\s+OH$/, "").trim();
   zip = String(zip ?? "").slice(0, 5);
+  // Places to try after the ZIP: the city as written, then city and
+  // municipality/township reduced to a bare name (matches a parcel's jurisdiction).
+  const places = [...new Set([city, placeKey(city), placeKey(muni)])].filter(Boolean);
   const full = rest.join(" ");
   const quad = withoutQuadrant(rest).join(" ");
   const core = coreName(rest);
   const coreStr = core.join(" ");
+  const quadDir = trailingDirectional(rest);
+  // "275 PARK AVE W": parcels are also indexed as "W PARK" (see buildIndex).
+  const ledStr = quadDir && !DIRECTIONALS.has(core[0]) ? `${quadDir} ${coreStr}` : null;
   const noLead = coreWithoutLead(core);
   const noLeadStr = noLead ? noLead.join(" ") : null;
 
@@ -468,10 +564,28 @@ export function matchAddress(ix, { street, city = "", zip = "" }) {
   if (!hit) { const h = lookup(ix.apAnywhere, `${number}|${coreStr}`); if (h) { hit = h; tier = TIER.ADDRESS_ELSEWHERE; } }
   // 5: the parcel roll (gives the parcel number).
   if (!hit) {
-    const h = lookup(ix.pcCore, `${number}|${coreStr}|${zip}`) ??
+    const inPlace = (form) => { for (const g of places) { const x = lookup(ix.pcCore, `${number}|${form}|${g}`); if (x) return x; } return null; };
+    const h = (ledStr ? lookup(ix.pcCore, `${number}|${ledStr}|${zip}`) ?? inPlace(ledStr) : null) ??
+      lookup(ix.pcCore, `${number}|${coreStr}|${zip}`) ?? inPlace(coreStr) ??
       lookup(ix.pcAnywhere, `${number}|${coreStr}`) ??
-      (noLeadStr && (lookup(ix.pcCore, `${number}|${noLeadStr}|${zip}`) ?? lookup(ix.pcAnywhere, `${number}|${noLeadStr}`)));
+      (noLeadStr && (lookup(ix.pcCore, `${number}|${noLeadStr}|${zip}`) ?? inPlace(noLeadStr) ?? lookup(ix.pcAnywhere, `${number}|${noLeadStr}`)));
     if (h) { hit = h; tier = TIER.PARCEL; }
+  }
+  // 5b: the file left the directional off ("430 SUPERIOR ST" for 430 N
+  // SUPERIOR ST). Taken only when exactly one of N/S/E/W has that number here.
+  if (!hit && core.length && !DIRECTIONALS.has(core[0])) {
+    const found = [];
+    for (const d of ["N", "S", "E", "W"]) {
+      let h = lookup(ix.pcCore, `${number}|${d} ${coreStr}|${zip}`);
+      for (const g of places) h = h ?? lookup(ix.pcCore, `${number}|${d} ${coreStr}|${g}`);
+      if (h) found.push([h, TIER.PARCEL]);
+      else {
+        let v = null;
+        for (const g of [zip, ...places]) if (g) v = v ?? lookup(ix.vrCore, `${number}|${d} ${coreStr}|${g}`);
+        if (v) found.push([v, TIER.VOTER]);
+      }
+    }
+    if (found.length === 1) [hit, tier] = found[0];
   }
   // 6: prefix / truncated-word match on the same number and ZIP.
   if (!hit) {
@@ -489,7 +603,7 @@ export function matchAddress(ix, { street, city = "", zip = "" }) {
   // 7: a registered voter at that address (the roll is already geocoded).
   if (!hit) {
     let h = null;
-    for (const geo of [city, zip]) { if (geo) h = h ?? lookup(ix.vrCore, `${number}|${coreStr}|${geo}`); }
+    for (const geo of [city, zip, ...places]) { if (geo) h = h ?? lookup(ix.vrCore, `${number}|${coreStr}|${geo}`); }
     h = h ?? lookup(ix.vrAnywhere, `${number}|${coreStr}`) ??
       (noLeadStr && lookup(ix.vrAnywhere, `${number}|${noLeadStr}`));
     if (h) { hit = h; tier = TIER.VOTER; }
@@ -502,18 +616,28 @@ export function matchAddress(ix, { street, city = "", zip = "" }) {
   if (!hit) {
     const want = Number(number);
     for (const form of [coreStr, noLeadStr].filter(Boolean)) {
-      for (const geo of [zip, city]) {
+      for (const geo of [zip, ...places]) {
         if (!geo) continue;
-        const cands = ix.byStreet.get(`${form}|${geo}`);
+        let cands = ix.byStreet.get(`${form}|${geo}`);
         if (!cands) continue;
+        // "PARK AVE W" and "PARK AVE E" share a core name: keep to the side
+        // the address names (or to the plain street when it names none), if known there.
+        const side = cands.filter((c) => c[2] === quadDir);
+        for (const pool of side.length && side.length < cands.length ? [side, cands] : [cands]) {
         let bestD = Infinity, bestPts = null;
-        for (const [n, pt] of cands) {
+        for (const [n, pt] of pool) {
           const d = Math.abs(n - want) + (n % 2 === want % 2 ? 0 : 0.5);
           if (d < bestD) { bestD = d; bestPts = [pt]; } else if (d === bestD) bestPts.push(pt);
         }
-        if (bestPts && bestD <= STREET_MAX_DELTA && samePlace(bestPts)) {
+        // This tier is approximate already, so candidates that share the
+        // nearest number may sit a few blocks apart (three parcels numbered
+        // 559 along one boulevard); the exact number spread over a large site
+        // (a mall's parcels, "5001 MONROE ST") gets a little more room.
+        if (bestPts && bestD <= STREET_MAX_DELTA && samePlace(bestPts, TIGHT_DEG * (bestD === 0 ? 5 : 3))) {
           hit = centroid(bestPts); hit.meta = null; tier = TIER.STREET; approx = true; break;
         }
+        }
+        if (hit) break;
       }
       if (hit) break;
     }
