@@ -27,6 +27,14 @@
 // Each Ohio match becomes a deep link into that county's parcels app
 // (parcels-core 1.11.0, data/deepLink.ts):
 //   <app>?q=<street>, <zip>&lat=<lat>&lon=<lon>
+//
+// OTHER FLEET APPS (1.2.0)
+//
+// An app that has already located a record (a liquor permit, a brownfield, a
+// voter's address) builds the same kind of link with parcelsAppLink(county,
+// { parcelId, address, lat, lon }), so it opens the parcel instead of the
+// parcels map's home page. Every link into a parcels app goes through
+// deepLinkUrl() below, so the format lives in one place.
 
 import { PARCELS_APPS } from "./parcelsApps.js";
 
@@ -156,14 +164,89 @@ export function parseMatches(json) {
 export function parcelsLink(match, apps = PARCELS_APPS) {
   const app = apps[match.countyFips];
   if (!app) return null;
-  const params = new URLSearchParams();
   // Street + ZIP: enough for the app's search to find the parcel, and the ZIP
   // keeps "100 MAIN ST" from matching every town in the county. The city is
   // left out on purpose - the Auditor usually records the township instead.
-  params.set("q", match.zip ? match.street + ", " + match.zip : match.street);
-  params.set("lat", match.lat.toFixed(6));
-  params.set("lon", match.lon.toFixed(6));
-  return { match, county: app.county, url: app.url + "?" + params.toString() };
+  const q = match.zip ? match.street + ", " + match.zip : match.street;
+  return { match, county: app.county, url: deepLinkUrl(app.url, q, match.lat, match.lon) };
+}
+
+/**
+ * A parcels app URL with a parcels-core deep link (`?q=..&lat=..&lon=..`).
+ * Blank `q` and a missing or out-of-range point are left out; with neither,
+ * this is the app's home page.
+ * @param {string} appUrl
+ * @param {string | null | undefined} q
+ * @param {number | null | undefined} lat
+ * @param {number | null | undefined} lon
+ * @returns {string}
+ */
+export function deepLinkUrl(appUrl, q, lat, lon) {
+  const params = new URLSearchParams();
+  const text = (q ?? "").trim();
+  if (text) params.set("q", text);
+  if (isPoint(lat, lon)) {
+    params.set("lat", /** @type {number} */ (lat).toFixed(6));
+    params.set("lon", /** @type {number} */ (lon).toFixed(6));
+  }
+  const search = params.toString();
+  return search ? appUrl + "?" + search : appUrl;
+}
+
+/** @param {unknown} lat @param {unknown} lon */
+function isPoint(lat, lon) {
+  return (
+    typeof lat === "number" && typeof lon === "number" &&
+    Number.isFinite(lat) && Number.isFinite(lon) &&
+    Math.abs(lat) <= 90 && Math.abs(lon) <= 180
+  );
+}
+
+/** "Van Wert", "VAN WERT COUNTY", "van-wert" -> "vanwert". */
+function countyKey(county) {
+  return String(county ?? "").toLowerCase().replace(/[^a-z]/g, "").replace(/county$/, "");
+}
+
+/**
+ * The parcels app for an Ohio county named in words ("Van Wert", "Van Wert
+ * County", "van-wert"), or null when there is none.
+ * @param {string} county
+ * @param {Record<string, {county: string, url: string}>} [apps]
+ * @returns {{county: string, url: string} | null}
+ */
+export function parcelsAppFor(county, apps = PARCELS_APPS) {
+  const key = countyKey(county);
+  if (!key) return null;
+  for (const app of Object.values(apps)) if (countyKey(app.county) === key) return app;
+  return null;
+}
+
+/**
+ * @typedef {Object} ParcelTarget
+ * @property {string | null} [parcelId]  The county's parcel number, as the Auditor writes it: "35-071-0-005.00-0"
+ * @property {string | null} [address]   Street address, ideally "<number> <street>, <zip>"
+ * @property {number | null} [lat]
+ * @property {number | null} [lon]
+ */
+
+/**
+ * The link into a county's parcels app for a record another fleet app has
+ * already located, or null when the county has no parcels app.
+ *
+ * The search text is the parcel number when there is one (the parcels search
+ * finds it exactly), otherwise the address. The point is the fallback: the
+ * parcels app flies there when the search finds nothing. With no target at
+ * all, the link is the app's home page.
+ * @param {string} county
+ * @param {ParcelTarget} [target]
+ * @param {Record<string, {county: string, url: string}>} [apps]
+ * @returns {string | null}
+ */
+export function parcelsAppLink(county, target = {}, apps = PARCELS_APPS) {
+  const app = parcelsAppFor(county, apps);
+  if (!app) return null;
+  const q = (target.parcelId ?? "").trim() || (target.address ?? "").trim();
+  return deepLinkUrl(app.url, q, target.lat, target.lon);
 }
 
 /**

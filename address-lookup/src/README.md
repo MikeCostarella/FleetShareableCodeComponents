@@ -22,5 +22,21 @@ const r = await lookupWithJsonp("4761 Waterloo Rd, Atwater, OH 44201"); // web p
 
 The `url` is a parcels-core 1.11.0 deep link; the app runs the search on load.
 
+An app that has already located a record links straight to its parcel (1.2.0):
+
+```ts
+import { parcelsAppLink } from "./vendor/address-lookup/addressLookup.js";
+
+parcelsAppLink("Mahoning", { parcelId: "35-071-0-005.00-0", lat: 40.99013, lon: -80.58376 });
+// ".../MahoningCountyParcels/?q=35-071-0-005.00-0&lat=40.990130&lon=-80.583760"
+parcelsAppLink("Mahoning", { address: "8828 Youngstown Pittsburg Rd, 44514", lat, lon }); // no parcel #
+parcelsAppLink("Mahoning");                     // the app's home page
+parcelsAppLink("Nowhere");                      // null: no parcels app
+```
+
+The parcel number wins over the address as the search text; the point is the
+fallback the app flies to when the search finds nothing.
+
 Used by: OhioCounties (hub "Find a parcel by address"),
-OhioFleetAddressParcelSearchBrowserExtension (Ohio Parcel Finder).
+OhioFleetAddressParcelSearchBrowserExtension (Ohio Parcel Finder),
+OhioLiquorPermits ("Open parcel", 1.2.0).

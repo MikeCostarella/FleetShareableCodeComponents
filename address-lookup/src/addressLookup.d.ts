@@ -32,6 +32,16 @@ export declare function geocoderUrl(address: string, jsonpCallback?: string): st
 export declare function ohioRetryAddress(address: string): string | null;
 export declare function parseMatches(json: unknown): AddressMatch[];
 export declare function parcelsLink(match: AddressMatch, apps?: ParcelsApps): ParcelsLink | null;
+export interface ParcelTarget {
+  parcelId?: string | null;
+  address?: string | null;
+  lat?: number | null;
+  lon?: number | null;
+}
+
+export declare function deepLinkUrl(appUrl: string, q?: string | null, lat?: number | null, lon?: number | null): string;
+export declare function parcelsAppFor(county: string, apps?: ParcelsApps): { county: string; url: string } | null;
+export declare function parcelsAppLink(county: string, target?: ParcelTarget, apps?: ParcelsApps): string | null;
 export declare function resolve(json: unknown, apps?: ParcelsApps): LookupResult;
 export declare function lookupWithFetch(address: string, fetchImpl?: typeof fetch): Promise<LookupResult>;
 export declare function lookupWithJsonp(

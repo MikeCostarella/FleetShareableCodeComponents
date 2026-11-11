@@ -3,10 +3,13 @@
 
 import { describe, expect, it, vi } from "vitest";
 import {
+  deepLinkUrl,
   geocoderUrl,
   lookupWithFetch,
   lookupWithJsonp,
   ohioRetryAddress,
+  parcelsAppFor,
+  parcelsAppLink,
   parcelsLink,
   parseMatches,
   resolve,
@@ -205,5 +208,55 @@ describe("the Ohio retry in both lookups", () => {
     const r = await lookupWithJsonp("844 Dravis St SE", { doc, win });
     expect(r.status).toBe("found");
     expect(calls).toBe(2);
+  });
+});
+
+describe("parcelsAppLink (1.2.0)", () => {
+  const MAHONING = "https://mikecostarella.github.io/MahoningCountyParcels/";
+
+  it("finds a county's app however the name is written", () => {
+    for (const name of ["Mahoning", "MAHONING COUNTY", "mahoning", "Mahoning County"]) {
+      expect(parcelsAppFor(name)?.url).toBe(MAHONING);
+    }
+    expect(parcelsAppFor("Van Wert")?.county).toBe("Van Wert");
+    expect(parcelsAppFor("van-wert")?.county).toBe("Van Wert");
+    expect(parcelsAppFor("Allegheny")).toBeNull();
+    expect(parcelsAppFor("")).toBeNull();
+  });
+
+  it("searches the parcel number, with the point as the fallback", () => {
+    const url = parcelsAppLink("Mahoning", {
+      parcelId: "35-071-0-005.00-0",
+      address: "8828 Youngstown Pittsburg Rd, 44514",
+      lat: 40.99013,
+      lon: -80.58376,
+    });
+    expect(url).toBe(MAHONING + "?q=35-071-0-005.00-0&lat=40.990130&lon=-80.583760");
+    const u = new URL(url);
+    expect(readDeepLink(u.search)).toEqual({ q: "35-071-0-005.00-0", lat: 40.99013, lon: -80.58376 });
+  });
+
+  it("falls back to the address, then to the point alone, then to the home page", () => {
+    const byAddress = new URL(parcelsAppLink("Mahoning", { parcelId: " ", address: "8828 Youngstown Pittsburg Rd, 44514", lat: 40.99, lon: -80.58 }));
+    expect(readDeepLink(byAddress.search)).toEqual({ q: "8828 Youngstown Pittsburg Rd, 44514", lat: 40.99, lon: -80.58 });
+    const byPoint = new URL(parcelsAppLink("Mahoning", { parcelId: null, lat: 40.99, lon: -80.58 }));
+    expect(readDeepLink(byPoint.search)).toEqual({ q: "", lat: 40.99, lon: -80.58 });
+    expect(parcelsAppLink("Mahoning")).toBe(MAHONING);
+    expect(parcelsAppLink("Mahoning", { lat: null, lon: null })).toBe(MAHONING);
+  });
+
+  it("drops a broken point rather than sending it", () => {
+    expect(parcelsAppLink("Mahoning", { parcelId: "X", lat: NaN, lon: -80 })).toBe(MAHONING + "?q=X");
+    expect(parcelsAppLink("Mahoning", { lat: 91, lon: -80 })).toBe(MAHONING);
+  });
+
+  it("returns null for a county with no parcels app", () => {
+    expect(parcelsAppLink("Nowhere", { parcelId: "1" })).toBeNull();
+  });
+
+  it("is the same link format the hub's parcelsLink builds", () => {
+    expect(deepLinkUrl("A/", "4761 WATERLOO RD, 44201", 41.032631675101, -81.220906608232)).toBe(
+      "A/?q=4761+WATERLOO+RD%2C+44201&lat=41.032632&lon=-81.220907",
+    );
   });
 });
