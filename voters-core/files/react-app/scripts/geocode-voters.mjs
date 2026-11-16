@@ -8,7 +8,8 @@
  *
  *   ../TrumbullCountyAddressPoints/react-app/public/data/address-points.json
  *   ../TrumbullCountyParcels/react-app/public/data/parcels.json
- *   ../TrumbullCountyJurisdictions/react-app/public/data/jurisdictions.json
+ *   ../OhioJurisdictions/react-app/public/data/counties/trumbull.json
+ *   (or, until it is retired, ../TrumbullCountyJurisdictions/react-app/public/data/jurisdictions.json)
  *
  * (Paths are relative to C:\projects — i.e. the sibling repos. Nothing is
  * copied into this repo; if a sibling is missing the script says so and stops.
@@ -38,7 +39,7 @@
  *
  * JURISDICTION
  *
- * Once a voter has a coordinate, it is tested against the county's 39 civil
+ * Once a voter has a coordinate, it is tested against the county's civil
  * boundaries to record which municipality or township it actually sits in.
  * That is NOT the same as the mailing city: the GIRARD post office serves
  * 7,133 voters, but only 3,857 of them live in the city of Girard - the rest
@@ -48,8 +49,13 @@
  * The address-point file carries its own `j` field, which is not used here: it
  * has 64 values, including out-of-county names and post-office CDPs like
  * Bristolville and Leavittsburg that are not civil jurisdictions at all.
- * TrumbullCountyJurisdictions is the same 39 shapes the Jurisdictions app
- * draws, so testing against it keeps the two apps telling the same story.
+ * The boundaries come from OhioJurisdictions (Census TIGER/Line, one file per
+ * county, every county in Ohio), the same shapes that app draws, so the two
+ * tell the same story. Census villages and cities lie INSIDE their township's
+ * polygon, so places are tested first and the first hit wins; a township-only
+ * hit means the voter is in the unincorporated part. The legacy
+ * <County>CountyJurisdictions file (county GIS, Trumbull and Ashtabula only)
+ * is used only when the statewide file is absent.
  */
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -68,18 +74,25 @@ const VOTERS = join(ROOT, "react-app", "public", "data", "voters.json");
  * script serves every *CountyVoters repo without editing. Not every county has
  * every sibling: a county with no *CountyAddressPoints app is geocoded from
  * parcels alone (tiers 5 and 6 only; lower placement, still a map), and a
- * county with no *CountyJurisdictions app keeps the jurisdiction the converter
- * wrote from the roll's own CITY / TOWNSHIP / VILLAGE columns instead of a
+ * county whose boundaries are missing (no OhioJurisdictions checkout and no
+ * *CountyJurisdictions app) keeps the jurisdiction the converter wrote from
+ * the roll's own CITY / TOWNSHIP / VILLAGE columns instead of a
  * point-in-polygon result. Only the parcels repo is required.
  */
 console.log(`Reading voters.json ...`);
 const data = readJson(VOTERS, "voters");
 console.log(`  ${data.voters.length.toLocaleString()} voters`);
-const COUNTY = (String(data.county ?? "").match(/^(.+?) County/) ?? [, "Trumbull"])[1].replace(/\s+/g, "");
+const COUNTY_NAME = (String(data.county ?? "").match(/^(.+?) County/) ?? [, "Trumbull"])[1];
+const COUNTY = COUNTY_NAME.replace(/\s+/g, "");
+/** "Van Wert" -> "van-wert": the county file OhioJurisdictions writes (tools/build-boundaries.py). */
+const COUNTY_SLUG = COUNTY_NAME.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 const sibling = (suffix, file) => join(FLEET, `${COUNTY}County${suffix}`, "react-app", "public", "data", file);
+const STATEWIDE_JURISDICTIONS = join(FLEET, "OhioJurisdictions", "react-app", "public", "data", "counties", `${COUNTY_SLUG}.json`);
 const ADDRESS_POINTS = sibling("AddressPoints", "address-points.json");
 const PARCELS = sibling("Parcels", "parcels.json");
-const JURISDICTIONS = sibling("Jurisdictions", "jurisdictions.json");
+const LEGACY_JURISDICTIONS = sibling("Jurisdictions", "jurisdictions.json");
+const JURISDICTIONS = existsSync(STATEWIDE_JURISDICTIONS) ? STATEWIDE_JURISDICTIONS : LEGACY_JURISDICTIONS;
+const JURISDICTION_SOURCE = JURISDICTIONS === STATEWIDE_JURISDICTIONS ? "OhioJurisdictions" : `${COUNTY}CountyJurisdictions`;
 
 /**
  * How far apart candidate points may be and still count as "the same place",
@@ -567,7 +580,11 @@ const jurisdictionGeo = readOptionalJson(JURISDICTIONS, "jurisdiction boundaries
 
 /** Flattened polygon parts with a bounding box each, so the test is cheap. */
 const parts = [];
-for (const f of jurisdictionGeo?.features ?? []) {
+// Places before townships: in the Census file a village or city sits inside
+// its township's polygon, and the first hit wins below. (The legacy county-GIS
+// file carved places out of their townships, so the order made no difference.)
+const rank = (f) => (f.properties.type === "Township" ? 1 : 0);
+for (const f of [...(jurisdictionGeo?.features ?? [])].sort((a, b) => rank(a) - rank(b))) {
   const g = f.geometry;
   const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
   for (const poly of polys) {
@@ -578,7 +595,8 @@ for (const f of jurisdictionGeo?.features ?? []) {
       if (y < y0) y0 = y;
       if (y > y1) y1 = y;
     }
-    parts.push({ name: f.properties.NAME, poly, x0, y0, x1, y1 });
+    // NAME in the legacy county-GIS file, name in the OhioJurisdictions file.
+    parts.push({ name: f.properties.NAME ?? f.properties.name, poly, x0, y0, x1, y1 });
   }
 }
 
@@ -658,7 +676,7 @@ data.geocode = {
   sources: [
     addressPoints.length ? `${COUNTY}CountyAddressPoints` : null,
     `${COUNTY}CountyParcels`,
-    jurisdictionGeo ? `${COUNTY}CountyJurisdictions` : (fromRoll ? "voter roll (CITY / TOWNSHIP / VILLAGE)" : null),
+    jurisdictionGeo ? JURISDICTION_SOURCE : (fromRoll ? "voter roll (CITY / TOWNSHIP / VILLAGE)" : null),
   ].filter(Boolean),
   placed,
   unplaced: tally[GEO.NONE],

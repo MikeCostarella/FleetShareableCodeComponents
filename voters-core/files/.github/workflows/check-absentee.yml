@@ -20,8 +20,9 @@
 # same way. "Run workflow" re-merges whatever CSV is committed.
 #
 # SIBLING REPOS
-# The geocoder reads ../<County>CountyParcels (parcels.json, always) and, when
-# they exist, ../<County>CountyJurisdictions (jurisdictions.json) and
+# The geocoder reads ../<County>CountyParcels (parcels.json, always),
+# ../OhioJurisdictions (the county's boundary file, every county) and, when
+# they exist, ../<County>CountyJurisdictions (legacy, Trumbull/Ashtabula) and
 # ../<County>CountyAddressPoints (address-points.json). They are PRIVATE, so
 # the checkouts use the FLEET_DATA_TOKEN secret: a fine-grained token with
 # Contents: read-only on them. A repo the token cannot see is treated as
@@ -124,6 +125,13 @@ jobs:
               echo "- ${prefix}${kind}: not used (absent, or the token cannot see it)" >> "$GITHUB_STEP_SUMMARY"
             fi
           done
+          if gh api "repos/${GITHUB_REPOSITORY_OWNER}/OhioJurisdictions" --silent 2>/dev/null; then
+            echo "statewide=true" >> "$GITHUB_OUTPUT"
+            echo "- OhioJurisdictions: used (county boundaries)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "statewide=false" >> "$GITHUB_OUTPUT"
+            echo "- OhioJurisdictions: not used (the token cannot see it)" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Check out the parcels
         if: steps.local.outputs.active == 'true'
@@ -136,7 +144,18 @@ jobs:
           sparse-checkout: react-app/public/data/parcels*.json
           sparse-checkout-cone-mode: false
 
-      - name: Check out the jurisdictions
+      - name: Check out the statewide jurisdiction boundaries
+        if: steps.local.outputs.active == 'true' && steps.sib.outputs.statewide == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/OhioJurisdictions
+          token: ${{ secrets.FLEET_DATA_TOKEN || github.token }}
+          path: OhioJurisdictions
+          # one file per county (~4 MB for all 88); the geocoder picks this county's
+          sparse-checkout: react-app/public/data/counties/*.json
+          sparse-checkout-cone-mode: false
+
+      - name: Check out the jurisdictions (legacy county-GIS app, if any)
         if: steps.local.outputs.active == 'true' && steps.sib.outputs.Jurisdictions == 'true'
         uses: actions/checkout@v4
         with:
@@ -161,7 +180,7 @@ jobs:
         shell: bash
         working-directory: ${{ env.REPO_NAME }}/react-app
         run: |
-          ls -l ../../*County{Parcels,Jurisdictions,AddressPoints}/react-app/public/data/*.json 2>/dev/null || true
+          ls -l ../../*County{Parcels,Jurisdictions,AddressPoints}/react-app/public/data/*.json ../../OhioJurisdictions/react-app/public/data/counties/*.json 2>/dev/null || true
           npm ci
           npm run absentee 2>&1 | tee /tmp/absentee.log
           {

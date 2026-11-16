@@ -106,8 +106,9 @@
  * The roll says which city, village or township each voter is in (the CITY,
  * TOWNSHIP and VILLAGE columns), so the jurisdiction cell is filled here, named
  * the way the fleet's boundary files name them ("Girard", "Howland Township").
- * In a county with a *CountyJurisdictions app the geocoder replaces it with
- * the point-in-polygon result, as before; in a county without one it stands.
+ * The geocoder then replaces it with the point-in-polygon result from the
+ * OhioJurisdictions boundaries (every county); only where that file is missing
+ * does the roll's value stand.
  *
  * STATUS
  *
@@ -456,7 +457,7 @@ function titleCase(s) {
 
 /**
  * The voter's civil jurisdiction from the roll's own columns, named the way
- * the fleet's *CountyJurisdictions boundaries name them: a city or village by
+ * the fleet's OhioJurisdictions boundaries name them: a city or village by
  * its bare name ("Girard", "McDonald"), a township as "Howland Township". A
  * village or city inside a township is the village or city.
  */

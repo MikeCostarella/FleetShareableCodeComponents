@@ -14,8 +14,9 @@ export interface Voter {
   /** Mailing city from the BOE export - the post office, not the boundary. */
   city: string;
   /**
-   * Civil jurisdiction the voter's coordinate falls in, from
-   * TrumbullCountyJurisdictions. NO_JURISDICTION when they could not be placed.
+   * Civil jurisdiction the voter's coordinate falls in, from the
+   * OhioJurisdictions boundaries (Census TIGER/Line, per county).
+   * NO_JURISDICTION when they could not be placed.
    */
   jurisdiction: string;
   state: string;
