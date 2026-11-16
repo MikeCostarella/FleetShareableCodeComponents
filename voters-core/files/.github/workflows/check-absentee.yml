@@ -22,8 +22,7 @@
 # SIBLING REPOS
 # The geocoder reads ../<County>CountyParcels (parcels.json, always),
 # ../OhioJurisdictions (the county's boundary file, every county) and, when
-# they exist, ../<County>CountyJurisdictions (legacy, Trumbull/Ashtabula) and
-# ../<County>CountyAddressPoints (address-points.json). They are PRIVATE, so
+# it exists, ../<County>CountyAddressPoints (address-points.json). They are PRIVATE, so
 # the checkouts use the FLEET_DATA_TOKEN secret: a fine-grained token with
 # Contents: read-only on them. A repo the token cannot see is treated as
 # absent - the job summary names each one, so a token missing a repo shows
@@ -116,7 +115,7 @@ jobs:
             echo "::warning title=FLEET_DATA_TOKEN not set::${prefix}Parcels is private; without the FLEET_DATA_TOKEN secret the checkout fails with 'Not Found'."
           fi
           echo "### Sibling repos" >> "$GITHUB_STEP_SUMMARY"
-          for kind in Jurisdictions AddressPoints; do
+          for kind in AddressPoints; do
             if gh api "repos/${GITHUB_REPOSITORY_OWNER}/${prefix}${kind}" --silent 2>/dev/null; then
               echo "${kind}=true" >> "$GITHUB_OUTPUT"
               echo "- ${prefix}${kind}: used" >> "$GITHUB_STEP_SUMMARY"
@@ -155,16 +154,6 @@ jobs:
           sparse-checkout: react-app/public/data/counties/*.json
           sparse-checkout-cone-mode: false
 
-      - name: Check out the jurisdictions (legacy county-GIS app, if any)
-        if: steps.local.outputs.active == 'true' && steps.sib.outputs.Jurisdictions == 'true'
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/${{ steps.sib.outputs.prefix }}Jurisdictions
-          token: ${{ secrets.FLEET_DATA_TOKEN || github.token }}
-          path: ${{ steps.sib.outputs.prefix }}Jurisdictions
-          sparse-checkout: react-app/public/data/jurisdictions.json
-          sparse-checkout-cone-mode: false
-
       - name: Check out the address points
         if: steps.local.outputs.active == 'true' && steps.sib.outputs.AddressPoints == 'true'
         uses: actions/checkout@v4
@@ -180,7 +169,7 @@ jobs:
         shell: bash
         working-directory: ${{ env.REPO_NAME }}/react-app
         run: |
-          ls -l ../../*County{Parcels,Jurisdictions,AddressPoints}/react-app/public/data/*.json ../../OhioJurisdictions/react-app/public/data/counties/*.json 2>/dev/null || true
+          ls -l ../../*County{Parcels,AddressPoints}/react-app/public/data/*.json ../../OhioJurisdictions/react-app/public/data/counties/*.json 2>/dev/null || true
           npm ci
           npm run absentee 2>&1 | tee /tmp/absentee.log
           {

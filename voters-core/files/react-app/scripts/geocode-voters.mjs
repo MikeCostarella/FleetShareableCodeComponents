@@ -9,7 +9,6 @@
  *   ../TrumbullCountyAddressPoints/react-app/public/data/address-points.json
  *   ../TrumbullCountyParcels/react-app/public/data/parcels.json
  *   ../OhioJurisdictions/react-app/public/data/counties/trumbull.json
- *   (or, until it is retired, ../TrumbullCountyJurisdictions/react-app/public/data/jurisdictions.json)
  *
  * (Paths are relative to C:\projects — i.e. the sibling repos. Nothing is
  * copied into this repo; if a sibling is missing the script says so and stops.
@@ -53,9 +52,7 @@
  * county, every county in Ohio), the same shapes that app draws, so the two
  * tell the same story. Census villages and cities lie INSIDE their township's
  * polygon, so places are tested first and the first hit wins; a township-only
- * hit means the voter is in the unincorporated part. The legacy
- * <County>CountyJurisdictions file (county GIS, Trumbull and Ashtabula only)
- * is used only when the statewide file is absent.
+ * hit means the voter is in the unincorporated part.
  */
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -74,10 +71,10 @@ const VOTERS = join(ROOT, "react-app", "public", "data", "voters.json");
  * script serves every *CountyVoters repo without editing. Not every county has
  * every sibling: a county with no *CountyAddressPoints app is geocoded from
  * parcels alone (tiers 5 and 6 only; lower placement, still a map), and a
- * county whose boundaries are missing (no OhioJurisdictions checkout and no
- * *CountyJurisdictions app) keeps the jurisdiction the converter wrote from
- * the roll's own CITY / TOWNSHIP / VILLAGE columns instead of a
- * point-in-polygon result. Only the parcels repo is required.
+ * county whose boundary file is missing (no OhioJurisdictions checkout)
+ * keeps the jurisdiction the converter wrote from the roll's own CITY /
+ * TOWNSHIP / VILLAGE columns instead of a point-in-polygon result. Only the
+ * parcels repo is required.
  */
 console.log(`Reading voters.json ...`);
 const data = readJson(VOTERS, "voters");
@@ -90,9 +87,8 @@ const sibling = (suffix, file) => join(FLEET, `${COUNTY}County${suffix}`, "react
 const STATEWIDE_JURISDICTIONS = join(FLEET, "OhioJurisdictions", "react-app", "public", "data", "counties", `${COUNTY_SLUG}.json`);
 const ADDRESS_POINTS = sibling("AddressPoints", "address-points.json");
 const PARCELS = sibling("Parcels", "parcels.json");
-const LEGACY_JURISDICTIONS = sibling("Jurisdictions", "jurisdictions.json");
-const JURISDICTIONS = existsSync(STATEWIDE_JURISDICTIONS) ? STATEWIDE_JURISDICTIONS : LEGACY_JURISDICTIONS;
-const JURISDICTION_SOURCE = JURISDICTIONS === STATEWIDE_JURISDICTIONS ? "OhioJurisdictions" : `${COUNTY}CountyJurisdictions`;
+const JURISDICTIONS = STATEWIDE_JURISDICTIONS;
+const JURISDICTION_SOURCE = "OhioJurisdictions";
 
 /**
  * How far apart candidate points may be and still count as "the same place",
@@ -284,7 +280,7 @@ function readJson(path, what) {
     console.error(
       `\nCould not read the ${what} dataset:\n  ${path}\n\n` +
         `This script reads sibling fleet repos from ${FLEET}. Clone or pull the\n` +
-        `county's Parcels repo (and AddressPoints / Jurisdictions when it has them) next to this one.\n`,
+        `county's Parcels repo (and AddressPoints when it has one) next to this one, and OhioJurisdictions for the boundaries.\n`,
     );
     throw err;
   }
@@ -581,8 +577,7 @@ const jurisdictionGeo = readOptionalJson(JURISDICTIONS, "jurisdiction boundaries
 /** Flattened polygon parts with a bounding box each, so the test is cheap. */
 const parts = [];
 // Places before townships: in the Census file a village or city sits inside
-// its township's polygon, and the first hit wins below. (The legacy county-GIS
-// file carved places out of their townships, so the order made no difference.)
+// its township's polygon, and the first hit wins below.
 const rank = (f) => (f.properties.type === "Township" ? 1 : 0);
 for (const f of [...(jurisdictionGeo?.features ?? [])].sort((a, b) => rank(a) - rank(b))) {
   const g = f.geometry;
@@ -595,8 +590,7 @@ for (const f of [...(jurisdictionGeo?.features ?? [])].sort((a, b) => rank(a) - 
       if (y < y0) y0 = y;
       if (y > y1) y1 = y;
     }
-    // NAME in the legacy county-GIS file, name in the OhioJurisdictions file.
-    parts.push({ name: f.properties.NAME ?? f.properties.name, poly, x0, y0, x1, y1 });
+    parts.push({ name: f.properties.name, poly, x0, y0, x1, y1 });
   }
 }
 
